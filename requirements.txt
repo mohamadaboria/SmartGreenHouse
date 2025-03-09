@@ -1,0 +1,7 @@
+adafruit-circuitpython-dht
+adafruit-circuitpython-ads1x15
+numpy
+RPi.GPIO
+pigpio
+git+https://github.com/hhk7734/python3-gpiod.git
+pyserial

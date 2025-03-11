@@ -40,17 +40,17 @@ class GH_Sensors:
         self.__soil_RE_DE_pin.request(config=config, default_val=0)
         # set the uart configurations
         # self.__uart = busio.UART(self.__soil_Tx_pin, self.__soil_Rx_pin, 4800, 8, None, 1)        
-        self.__uart = serial.Serial("/dev/serial0", baudrate=4800, bytesize=8, parity='N', stopbits=1, timeout=1)
+        self.__uart = serial.Serial("/dev/ttyAMA0", baudrate=4800, bytesize=8, parity='N', stopbits=1, timeout=1)
 
     def __send_modbus_request(self):
-        modbus_req = bytes([0x01, 0x03, 0x00, 0x00, 0x00, 0x04, 0x44, 0x09])
+        modbus_req = [0x01, 0x03, 0x00, 0x00, 0x00, 0x04, 0x44, 0x09]
         # GPIO.output(self.__soil_RE_DE_pin, GPIO.HIGH)
-        self.__soil_RE_DE_pin.set_value(1)
+        # self.__soil_RE_DE_pin.set_value(1)
         time.sleep(0.01)
         self.__uart.write(modbus_req)
         time.sleep(0.01)
         # GPIO.output(self.__soil_RE_DE_pin, GPIO.LOW)        
-        self.__soil_RE_DE_pin.set_value(0)
+        # self.__soil_RE_DE_pin.set_value(0)
     
     def __get_modbus_response(self):
         response = self.__uart.read(11) # expected 11 bytes to be received
@@ -106,7 +106,7 @@ class GH_Sensors:
                 print("Invalid response for Soil Humidity request!")
                 return 0.0
             
-            humi_val = struct.unpack(">H", resp[5:7])[0] / 10.0
+            humi_val = struct.unpack(">H", resp[3:5])[0] / 10.0
 
             return humi_val
         except RuntimeError as err:
@@ -120,12 +120,12 @@ class GH_Sensors:
 
             if resp == None:
                 return 0.0
-
+            
             if resp[1] != 0x03:
                 print("Invalid response for Soil Temperature request!")
                 return 0.0
             
-            temp_val = struct.unpack(">H", resp[3:5])[0] / 10.0
+            temp_val = struct.unpack(">H", resp[5:7])[0] / 10.0
 
             return temp_val
         except RuntimeError as err:

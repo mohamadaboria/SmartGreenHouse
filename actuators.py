@@ -13,7 +13,7 @@ class GH_Actuators:
 
         self.chip = gpiod.chip('gpiochip4')
         self.__heater_pin = self.chip.get_line(heater_pin)
-        # self.__heater_fan_pin = self.chip.get_line(heater_fan_pin)
+        # self.__heater_fan_pin = self.chip.get_line(heater_fan_pin
 
         config = gpiod.line_request()
         config.consumer = "Heater"

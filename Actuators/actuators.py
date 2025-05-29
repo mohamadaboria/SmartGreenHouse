@@ -272,6 +272,7 @@ class GH_Actuators:
             print("Light not initialized.")
             return 0
         
+        
     def get_light_strip_2_duty_cycle(self) -> int:
         try:
             return self.__light_strip_2_duty_cycle

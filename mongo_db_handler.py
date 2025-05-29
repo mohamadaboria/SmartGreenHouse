@@ -78,3 +78,51 @@ class MongoDBHandler:
         except Exception as e:
             print(f"Error inserting image data: {e}")
             return False
+
+    def get_data(self, key):
+        try:
+            return self.__pi_data_map[key]['collection'].find_one()
+        except Exception as e:
+            print(f"Error retrieving data: {e}")
+            return None
+    
+    def get_all_data(self, key):
+        try:            
+            return self.__pi_data_map[key]['collection'].find()
+        except Exception as e:
+            print(f"Error retrieving all data: {e}")
+            return None
+    
+    def delete_data(self, key):
+        try:
+            self.__pi_data_map[key]['collection'].delete_many({})
+            return True
+        except Exception as e:
+            print(f"Error deleting data: {e}")
+            return False
+
+    def delete_all_data(self):
+        try:            
+            self.__db.drop()
+            return True
+        except Exception as e:
+            print(f"Error deleting all data: {e}")
+            return False
+
+    def get_latest_doc_where(self, collection: str, query: dict) -> dict:
+        try:
+            cursor = self.__db[collection].find(query).sort("timestamp", pymongo.DESCENDING).limit(1)
+            for doc in cursor:
+                return doc
+            return None
+        except Exception as e:
+            print(f"Error retrieving latest document: {e}")
+            return None
+
+    def close_connection(self):
+        try:            
+            self.__client.close()
+            return True
+        except Exception as e:
+            print(f"Error closing connection: {e}")
+            return False

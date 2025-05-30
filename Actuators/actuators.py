@@ -45,7 +45,7 @@ class GH_Actuators:
             # create the first byte to send to esp32
             first_byte = JOB_RESTART << 5 | len(frame) & 0x1F
             frame = first_byte.to_bytes(1, self.__frame_endianes) + frame + b'\x00' * (32 - len(frame) - 1)
-            print(f"Frame to send: {frame.hex()}")
+            # print(f"Frame to send: {frame.hex()}")
             # send first byte
             self.__i2c_bus.writeto(self.__esp32_i2c_address, frame)
             # get the ready byte from esp32            
@@ -66,7 +66,7 @@ class GH_Actuators:
             # create the first byte to send to esp32
             first_byte = JOB_LED_TOG << 5 | len(frame) & 0x1F
             frame = first_byte.to_bytes(1, self.__frame_endianes) + frame + b'\x00' * (32 - len(frame) - 1)
-            print(f"Frame to send: {frame.hex()}")
+            # print(f"Frame to send: {frame.hex()}")
             # send first byte
             self.__i2c_bus.writeto(self.__esp32_i2c_address, frame)
             time.sleep(0.1)
@@ -111,7 +111,7 @@ class GH_Actuators:
             first_byte = JOB_SET_DUTY << 5 | len(frame) & 0x1F
             # complete the 32 bytes
             frame = first_byte.to_bytes(1, self.__frame_endianes) + frame + b'\x00' * (32 - len(frame) - 1)
-            print(f"setting {device_name} to duty cycle {duty_cycle}: {frame.hex()}")
+            # print(f"setting {device_name} to duty cycle {duty_cycle}: {frame.hex()}")
             # get the ready byte from esp32
             self.__i2c_bus.writeto(self.__esp32_i2c_address, frame) 
             time.sleep(0.1)
@@ -136,6 +136,7 @@ class GH_Actuators:
 
     def set_heater_duty_cycle(self, duty_cycle: int) -> bool:
         try:
+            self.__heater_duty_cycle = duty_cycle
             return self.__send_duty_cycle_update_request(duty_cycle, self.__heater_pin, self.__heater_channel, "heater")        
         except Exception as e:
             # print(f"Error setting heater duty cycle: {e}")
@@ -155,6 +156,7 @@ class GH_Actuators:
     
     def set_heater_fan_duty_cycle(self, duty_cycle: int) -> bool:
         try:
+            self.__heater_fan_duty_cycle = duty_cycle
             return self.__send_duty_cycle_update_request(duty_cycle, self.__heater_fan_pin, self.__heater_fan_channel, "heater_fan")
         except Exception as e:
             # print(f"Error setting heater fan duty cycle: {e}")
@@ -174,6 +176,7 @@ class GH_Actuators:
     
     def set_fan_duty_cycle(self, duty_cycle: int) -> bool:
         try:
+            self.__fan_duty_cycle = duty_cycle
             return self.__send_duty_cycle_update_request(duty_cycle, self.__fan_pin, self.__fan_channel, "fan")
         except Exception as e:
             # print(f"Error setting fan duty cycle: {e}")
@@ -193,6 +196,7 @@ class GH_Actuators:
     
     def set_light_strip_1_duty_cycle(self, duty_cycle: int) -> bool:
         try:
+            self.__light_duty_cycle = duty_cycle
             return self.__send_duty_cycle_update_request(duty_cycle, self.__light_pin, self.__light_channel, "light_strip_1")
         except Exception as e:
             # print(f"Error setting light duty cycle: {e}")
@@ -212,6 +216,7 @@ class GH_Actuators:
         
     def set_light_strip_2_duty_cycle(self, duty_cycle: int) -> bool:
         try:
+            self.__light_strip_2_duty_cycle = duty_cycle
             return self.__send_duty_cycle_update_request(duty_cycle, self.__light_strip_2_pin, self.__light_strip_2_channel, "light_strip_2")
         except Exception as e:
             # print(f"Error setting light strip 2 duty cycle: {e}")
@@ -231,6 +236,7 @@ class GH_Actuators:
     
     def set_water_pump_duty_cycle(self, duty_cycle: int) -> bool:
         try:
+            self.__water_pump_duty_cycle = duty_cycle
             return self.__send_duty_cycle_update_request(duty_cycle, self.__water_pump_pin, self.__water_pump_channel, "water_pump")
         except Exception as e:
             # print(f"Error setting water pump duty cycle: {e}")
@@ -271,7 +277,6 @@ class GH_Actuators:
         except AttributeError:
             print("Light not initialized.")
             return 0
-        
         
     def get_light_strip_2_duty_cycle(self) -> int:
         try:

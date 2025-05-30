@@ -92,7 +92,7 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
             if soil_sem: acquired = soil_sem.acquire(blocking=False)
             if acquired or not soil_sem:
                 try:
-                    soil_ph, soil_ec, soil_humidity, soil_temp = sensors.get_soil_values()
+                    soil_ph, soil_ec, soil_hum, soil_temp = sensors.get_soil_values()
                     current_state["soil_ph"] = soil_ph if isinstance(soil_ph, (int, float)) else "Read Error"
                     current_state["soil_ec"] = soil_ec if isinstance(soil_ec, (int, float)) else "Read Error"
                     current_state["soil_temp"] = soil_temp if isinstance(soil_temp, (int, float)) else "Read Error"

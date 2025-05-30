@@ -463,10 +463,13 @@ def app_task():
                 soil_semaphore.release()
 
 
+            electricity_semaphore.acquire()
             try:
                 voltage, current, power, energy, frequency, power_factor, alarm = env_sensors.get_electricity_values()
             except Exception as e:
-                print(f"Error reading electricity sensor: {e}")                
+                print(f"Error reading electricity sensor: {e}")
+            finally:
+                electricity_semaphore.release()
 
 
             water_flow_semaphore.acquire()

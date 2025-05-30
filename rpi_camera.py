@@ -23,3 +23,15 @@ class GH_Camera:
             print(f"Error capturing image: {e}")
             return None
         
+    def remove_image(self, path=None):
+        try:
+            if path:
+                self.__last_path = path
+                
+            if self.__last_path:
+                os.remove(self.__last_path)
+                print(f"Image '{self.__last_path}' removed.")
+            else:
+                print("No image to remove.")
+        except Exception as e:
+            print(f"Error removing image: {e}")

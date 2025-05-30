@@ -194,7 +194,7 @@ def temperature_sp_adjustment_task():
     # PID controller parameters - easily tunable
     KP_TEMP = 1034.05  # Proportional gain
     KI_TEMP = 1.52  # Integral gain
-    KD_TEMP = 0  # Derivative gain
+    KD_TEMP = 0.0  # Derivative gain
     
     # Output limits for bidirectional control (-1 to 1)
     # Negative values for cooling, positive for heating
@@ -301,9 +301,9 @@ def temperature_sp_adjustment_task():
 
 def light_sp_adjustment_task():
     # PID controller parameters - easily tunable
-    KP_LIGHT = 70.38  # Proportional gain -> 75 
-    KI_LIGHT = 68.52  # Integral gain -> 55
-    KD_LIGHT = 18.07  # Derivative gain -> 22
+    KP_LIGHT = 20  # Proportional gain -> 75 
+    KI_LIGHT = 7.5  # Integral gain -> 55
+    KD_LIGHT = 0.1  # Derivative gain -> 22
     
     # Output limits (0-4095 for direct duty cycle)
     OUTPUT_LIMITS = (0, 4095)

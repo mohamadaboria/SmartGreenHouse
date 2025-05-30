@@ -21,23 +21,9 @@ latest_data = {
 # Lock for safely updating/reading latest_data 
 data_lock = threading.Lock()
 
-def get_actuator_dc_safe(actuator_obj, method_name):
-    """Safely attempts to call a get method on the actuator object."""
-    try:
-        if hasattr(actuator_obj, method_name):
-            method = getattr(actuator_obj, method_name)
-            if callable(method):
-                value = method()
-                return value if isinstance(value, (int, float)) else "Invalid"
-            else:
-                return "Not Callable"
-        else:
-            return "Not Impl."
-    except Exception as e:
-        print(f"Logger Error calling {method_name}: {e}")
-        return "Error"
+# Removed get_actuator_dc_safe helper function
 
-def serial_logger_task(sensors, actuators, temp_sem, light_sem, soil_sem, flow_sem):
+def serial_logger_task(sensors, actuators, temp_sem, light_sem, soil_sem, flow_sem, electricity_sem):
     """Reads sensor/actuator data at intervals (read-only) using datetime, prints formatted block."""
     global latest_data
     
@@ -77,7 +63,7 @@ def serial_logger_task(sensors, actuators, temp_sem, light_sem, soil_sem, flow_s
             if temp_sem:
                 acquired = temp_sem.acquire(blocking=False)
             
-            if acquired or not temp_sem: # Proceed if acquired or no semaphore needed
+            if acquired or not temp_sem:
                 try:
                     temp = sensors.get_air_temperature_C()
                     humid = sensors.get_air_humidity()
@@ -168,28 +154,40 @@ def serial_logger_task(sensors, actuators, temp_sem, light_sem, soil_sem, flow_s
             with data_lock:
                 local_latest_data["water_flow"] = latest_data["water_flow"]
 
-        # Electricity (10s) - Detailed Reading
+        # Electricity (10s) - Detailed Reading with Semaphore
         if now >= last_read_datetimes["electricity"] + intervals["electricity"]:
             elec_v, elec_c, elec_p, elec_e, elec_f, elec_pf, elec_a = ("N/A",)*7
-            try:
-                if hasattr(sensors, 'get_electricity_values'):
-                    # Read all values
+            acquired = False
+            if electricity_sem:
+                acquired = electricity_sem.acquire(blocking=False)
+            
+            if acquired or not electricity_sem:
+                try:
                     voltage, current, power, energy, frequency, power_factor, alarm = sensors.get_electricity_values()
-                    # Format them
                     elec_v = f"{voltage:.1f}" if isinstance(voltage, (int, float)) else "Read Error"
                     elec_c = f"{current:.2f}" if isinstance(current, (int, float)) else "Read Error"
                     elec_p = f"{power:.1f}" if isinstance(power, (int, float)) else "Read Error"
-                    elec_e = f"{energy:.3f}" if isinstance(energy, (int, float)) else "Read Error" # Assuming kWh might need more precision
+                    elec_e = f"{energy:.3f}" if isinstance(energy, (int, float)) else "Read Error"
                     elec_f = f"{frequency:.1f}" if isinstance(frequency, (int, float)) else "Read Error"
                     elec_pf = f"{power_factor:.2f}" if isinstance(power_factor, (int, float)) else "Read Error"
-                    elec_a = str(alarm) # Alarm might be bool or int
-                else:
-                    elec_v, elec_c, elec_p, elec_e, elec_f, elec_pf, elec_a = ("Not Impl.",)*7
-            except Exception as e:
-                print(f"Logger Error reading Electricity: {e}")
-                elec_v, elec_c, elec_p, elec_e, elec_f, elec_pf, elec_a = ("Exception",)*7
-            finally:
-                 last_read_datetimes["electricity"] = now
+                    elec_a = str(alarm)
+                except Exception as e:
+                    print(f"Logger Error reading Electricity: {e}")
+                    elec_v, elec_c, elec_p, elec_e, elec_f, elec_pf, elec_a = ("Exception",)*7
+                finally:
+                    if acquired:
+                        electricity_sem.release()
+                    last_read_datetimes["electricity"] = now
+            else: # Semaphore busy
+                with data_lock:
+                    elec_v = latest_data["electricity_voltage"]
+                    elec_c = latest_data["electricity_current"]
+                    elec_p = latest_data["electricity_power"]
+                    elec_e = latest_data["electricity_energy"]
+                    elec_f = latest_data["electricity_frequency"]
+                    elec_pf = latest_data["electricity_pf"]
+                    elec_a = latest_data["electricity_alarm"]
+            
             # Store individually
             local_latest_data["electricity_voltage"] = elec_v
             local_latest_data["electricity_current"] = elec_c
@@ -235,16 +233,60 @@ def serial_logger_task(sensors, actuators, temp_sem, light_sem, soil_sem, flow_s
             with data_lock:
                 local_latest_data["light_intensity"] = latest_data["light_intensity"]
 
-        # Actuator Duty Cycles (1s)
+        # Actuator Duty Cycles (1s) - Direct Try/Except
         if now >= last_read_datetimes["actuators"] + intervals["actuators"]:
-            local_latest_data["heater_dc"] = get_actuator_dc_safe(actuators, 'get_heater_duty_cycle')
-            local_latest_data["heater_fan_dc"] = get_actuator_dc_safe(actuators, 'get_heater_fan_duty_cycle')
-            local_latest_data["light_strip_1_dc"] = get_actuator_dc_safe(actuators, 'get_light_strip_1_duty_cycle')
-            local_latest_data["light_strip_2_dc"] = get_actuator_dc_safe(actuators, 'get_light_strip_2_duty_cycle')
-            local_latest_data["water_pump_dc"] = get_actuator_dc_safe(actuators, 'get_water_pump_duty_cycle')
-            local_latest_data["fan_dc"] = get_actuator_dc_safe(actuators, 'get_fan_duty_cycle')
+            # Heater DC
+            try:
+                local_latest_data["heater_dc"] = actuators.get_heater_duty_cycle()
+            except AttributeError:
+                 local_latest_data["heater_dc"] = "Not Impl."
+            except Exception as e:
+                print(f"Logger Error reading Heater DC: {e}")
+                local_latest_data["heater_dc"] = "Error"
+            # Heater Fan DC
+            try:
+                local_latest_data["heater_fan_dc"] = actuators.get_heater_fan_duty_cycle()
+            except AttributeError:
+                 local_latest_data["heater_fan_dc"] = "Not Impl."
+            except Exception as e:
+                print(f"Logger Error reading Heater Fan DC: {e}")
+                local_latest_data["heater_fan_dc"] = "Error"
+            # Light Strip 1 DC
+            try:
+                local_latest_data["light_strip_1_dc"] = actuators.get_light_strip_1_duty_cycle()
+            except AttributeError:
+                 local_latest_data["light_strip_1_dc"] = "Not Impl."
+            except Exception as e:
+                print(f"Logger Error reading Light 1 DC: {e}")
+                local_latest_data["light_strip_1_dc"] = "Error"
+            # Light Strip 2 DC
+            try:
+                local_latest_data["light_strip_2_dc"] = actuators.get_light_strip_2_duty_cycle()
+            except AttributeError:
+                 local_latest_data["light_strip_2_dc"] = "Not Impl."
+            except Exception as e:
+                print(f"Logger Error reading Light 2 DC: {e}")
+                local_latest_data["light_strip_2_dc"] = "Error"
+            # Water Pump DC
+            try:
+                local_latest_data["water_pump_dc"] = actuators.get_water_pump_duty_cycle()
+            except AttributeError:
+                 local_latest_data["water_pump_dc"] = "Not Impl."
+            except Exception as e:
+                print(f"Logger Error reading Pump DC: {e}")
+                local_latest_data["water_pump_dc"] = "Error"
+            # Fan DC
+            try:
+                local_latest_data["fan_dc"] = actuators.get_fan_duty_cycle()
+            except AttributeError:
+                 local_latest_data["fan_dc"] = "Not Impl."
+            except Exception as e:
+                print(f"Logger Error reading Fan DC: {e}")
+                local_latest_data["fan_dc"] = "Error"
+                
             last_read_datetimes["actuators"] = now
         else:
+            # Use last known values if not time to read
             with data_lock:
                 local_latest_data["heater_dc"] = latest_data["heater_dc"]
                 local_latest_data["heater_fan_dc"] = latest_data["heater_fan_dc"]
@@ -278,11 +320,13 @@ def serial_logger_task(sensors, actuators, temp_sem, light_sem, soil_sem, flow_s
         output.append(sensor_header)
         output.append(header_sep)
 
-        # Helper function for formatting values with units
         def format_value(value, unit):
-            # Check if value looks like a number before adding unit
-            is_numeric = isinstance(value, str) and value.replace('.', '', 1).lstrip('-').isdigit()
-            return f"{value} {unit}" if is_numeric else str(value)
+            is_numeric = isinstance(value, (int, float))
+            val_str = f"{value:.1f}" if isinstance(value, float) and unit != "kWh" and unit != "A" and unit != "" else str(value)
+            if isinstance(value, float) and unit == "kWh": val_str = f"{value:.3f}"
+            if isinstance(value, float) and unit == "A": val_str = f"{value:.2f}"
+            if isinstance(value, float) and unit == "PF": val_str = f"{value:.2f}"
+            return f"{val_str} {unit}" if is_numeric else str(value)
 
         sensors_to_print = [
             ("Temp (Air)", local_latest_data['temperature'], "C"),
@@ -293,24 +337,25 @@ def serial_logger_task(sensors, actuators, temp_sem, light_sem, soil_sem, flow_s
             ("Soil Temp", local_latest_data['soil_temp'], "C"),
             ("Soil Humidity", local_latest_data['soil_humidity'], "%"),
             ("Water Flow", local_latest_data['water_flow'], "L/min"),
-            # Detailed Electricity Readings
             ("Voltage", local_latest_data['electricity_voltage'], "V"),
             ("Current", local_latest_data['electricity_current'], "A"),
             ("Power", local_latest_data['electricity_power'], "W"),
-            ("Energy", local_latest_data['electricity_energy'], "kWh"), # Assuming kWh
+            ("Energy", local_latest_data['electricity_energy'], "kWh"),
             ("Frequency", local_latest_data['electricity_frequency'], "Hz"),
-            ("Power Factor", local_latest_data['electricity_pf'], ""),
+            ("Power Factor", local_latest_data['electricity_pf'], "PF"),
             ("Alarm Status", local_latest_data['electricity_alarm'], "")
         ]
         for name, value, unit in sensors_to_print:
-            val_str = format_value(value, unit)
+            # Re-check type for formatting as value might be string like "Error"
+            current_value = local_latest_data.get(name.lower().replace(" ", "_").replace("(","").replace(")",""), value) # Get potentially updated value
+            val_str = format_value(current_value, unit)
             output.append('|' + f" {name}".ljust(sensor_col_width) + '|' + f" {val_str}".ljust(value_col_width) + '|')
 
         output.append(header_sep)
         output.append(actuator_header)
         output.append(header_sep)
 
-        max_dc = 4095 # Assumed max based on previous code
+        max_dc = 4095
         actuators_to_print = [
             ("Heater", local_latest_data['heater_dc']),
             ("Heater Fan", local_latest_data['heater_fan_dc']),
@@ -324,14 +369,12 @@ def serial_logger_task(sensors, actuators, temp_sem, light_sem, soil_sem, flow_s
                 dc_perc = (dc / max_dc * 100) if max_dc > 0 else 0
                 val_str = f"{dc:<4} ({dc_perc:.1f}%)"
             else:
-                val_str = str(dc) # Display 'N/A', 'Error', 'Not Impl.', etc.
+                val_str = str(dc)
             output.append('|' + f" {name}".ljust(sensor_col_width) + '|' + f" {val_str}".ljust(value_col_width) + '|')
 
         output.append(sep_line)
 
-        # Clear screen and print
-        os.system('clear') 
+        os.system('clear')
         print("\n".join(output))
 
-        # Sleep for exactly 1 second before the next iteration
         time.sleep(1)

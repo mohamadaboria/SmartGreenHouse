@@ -10,6 +10,7 @@ from mongo_db_handler import MongoDBHandler
 from aws_s3_handler import S3Handler
 from rpi_camera import GH_Camera
 from setpoints import GH_Setpoints
+from serial_logger import serial_logger_task
 import threading
 import numpy as np
 from simple_pid import PID
@@ -116,12 +117,6 @@ mqtt_handler.set_subscription("loops/setpoints/light_intensity", setpoints.set_l
 mqtt_handler.set_subscription("loops/setpoints/soil_moisture", setpoints.set_soil_humidity_setpoint)
 mqtt_handler.set_subscription("loops/setpoints/water_flow", setpoints.set_water_flow_setpoint)
 mqtt_handler.set_subscription("loops/setpoints/operation_mode", setpoints.set_operation_mode)
-mqtt_handler.set_subscription("loops/light/kp", setpoints.set_light_kp)
-mqtt_handler.set_subscription("loops/light/ki", setpoints.set_light_ki)
-mqtt_handler.set_subscription("loops/light/kd", setpoints.set_light_kd)
-mqtt_handler.set_subscription("loops/temperature/kp", setpoints.set_temperature_kp)
-mqtt_handler.set_subscription("loops/temperature/ki", setpoints.set_temperature_ki)
-mqtt_handler.set_subscription("loops/temperature/kd", setpoints.set_temperature_kd)
 
 # set the publications
 mqtt_handler.set_publish("env_monitoring_system/sensors/air_temperature_C", 0, True)
@@ -420,8 +415,11 @@ def set_soil_moisture_setpoint_task():
 
         time.sleep(SLEEP_INTERVAL)
 
+serial_logger_thread = None
 
 def app_task():
+    global serial_logger_thread
+
     last_time_captured = datetime.datetime.now() - datetime.timedelta(hours=IMAGE_CAP_INTERVAL)
     last_sensor_update = datetime.datetime.now() - datetime.timedelta(seconds=30)
     last_actuators_update = datetime.datetime.now() - datetime.timedelta(seconds=1)
@@ -431,6 +429,10 @@ def app_task():
     prev_fan_duty_cycle = 0.0
     prev_water_pump_duty_cycle = 0.0
 
+    # start the serial logger task
+    serial_logger_thread = threading.Thread(target=serial_logger_task, args=(env_sensors, env_actuators, temperature_semaphore, light_semaphore, soil_semaphore, water_flow_semaphore))
+    serial_logger_thread.start()
+    
     # set manual operation mode
     setpoints.set_operation_mode("manual")
     while True:
@@ -626,6 +628,9 @@ def app_task():
 
 
 if __name__ == "__main__":
+    
+
+
     setpoints.set_control_thread_event("temperature", temperature_pause_event)
     setpoints.set_control_thread_event("light", light_pause_event)
     setpoints.set_control_thread_event("moisture", soil_pause_event)
@@ -644,6 +649,7 @@ if __name__ == "__main__":
 
     # wait for the threads to finish
     app_thread.join()
+    serial_logger_thread.join()
     temperature_thread.join()
     light_thread.join()
     soil_thread.join()

@@ -1,0 +1,217 @@
+import numpy as np
+import threading
+
+class GH_Setpoints:
+    def __init__(self, mqtt_handler, mongo_db_handler):        
+        self.__temperature_setpoint = 25.0
+        self.__humidity_setpoint = 60.0
+        self.__light_setpoint = 10.0 # 0 - 18 lux
+        self.__soil_ph_setpoint = 7.0
+        self.__soil_ec_setpoint = 150.0
+        self.__soil_temp_setpoint = 25.0
+        self.__soil_humidity_setpoint = 80.0
+        self.__water_flow_setpoint = 2 # L/h
+        self.operation_mode = "autonomous"  # Default operation mode (can be "manual" or "autonomous")
+        self.__control_threads_events = {
+            "temperature": threading.Event(),
+            "light": threading.Event(),
+            "moisture": threading.Event() 
+        }        
+
+        self.__light_kp = 0.1  # Default Kp value for light control PID
+        self.__light_ki = 0.01
+        self.__light_kd = 0.01
+
+        self.__temperature_kp = 0.1  # Default Kp value for temperature control PID
+        self.__temperature_ki = 0.01
+        self.__temperature_kd = 0.01
+
+        self.__mqtt_handler = mqtt_handler
+        self.__mongo_db_handler = mongo_db_handler
+
+        temp = self.__mongo_db_handler.get_latest_doc_where("setpoints", {"type": "temperature"})
+        if temp is not None:
+            self.__temperature_setpoint = int(temp["message"])
+
+        hum = self.__mongo_db_handler.get_latest_doc_where("setpoints", {"type": "humidity"})
+        if hum is not None:
+            self.__humidity_setpoint = int(hum["message"])
+
+        light = self.__mongo_db_handler.get_latest_doc_where("setpoints", {"type": "light_intensity"})
+        if light is not None:
+            self.__light_setpoint = int(light["message"])
+
+        soil_ph = self.__mongo_db_handler.get_latest_doc_where("setpoints", {"type": "soil_ph"})
+        if soil_ph is not None:
+            self.__soil_ph_setpoint = int(soil_ph["message"])
+
+        soil_ec = self.__mongo_db_handler.get_latest_doc_where("setpoints", {"type": "soil_ec"})
+        if soil_ec is not None:
+            self.__soil_ec_setpoint = int(soil_ec["message"])
+
+        soil_temp = self.__mongo_db_handler.get_latest_doc_where("setpoints", {"type": "soil_temp"})
+        if soil_temp is not None:
+            self.__soil_temp_setpoint = int(soil_temp["message"])
+
+        soil_humidity = self.__mongo_db_handler.get_latest_doc_where("setpoints", {"type": "soil_moisture"})
+        if soil_humidity is not None:
+            self.__soil_humidity_setpoint = int(soil_humidity["message"])
+
+        water_flow = self.__mongo_db_handler.get_latest_doc_where("setpoints", {"type": "water_flow"})
+        if water_flow is not None:
+            self.__water_flow_setpoint = int(water_flow["message"])
+
+        operation_mode = self.__mongo_db_handler.get_latest_doc_where("setpoints", {"type": "operation_mode"})
+        if operation_mode is not None:
+            self.operation_mode = operation_mode["message"]
+
+    def set_operation_mode(self, mode: str) -> None:
+        if mode not in ["manual", "autonomous"]:
+            raise ValueError("Invalid operation mode. Choose 'manual' or 'autonomous'.")
+        print(f"Setting operation mode to {mode}")
+        self.operation_mode = mode
+
+        if mode == "manual":
+            # Stop all control threads if they are running
+            for control_thread_event in self.__control_threads_events.values():
+                if control_thread_event is not None:
+                    # pause the thread
+                    control_thread_event.clear()
+        if mode == "autonomous":
+            # Resume all control threads if they are paused
+            for control_thread_event in self.__control_threads_events.values():
+                if control_thread_event is not None:
+                    # resume the thread
+                    control_thread_event.set()
+
+        print(f'initial setpoints: {self.get_all_setpoints()}')
+                
+    def set_control_thread_event(self, control_thread_name: str, event: threading.Event) -> None:
+        if control_thread_name not in self.__control_threads_events:
+            raise ValueError(f"Invalid control thread name: {control_thread_name}")
+        print(f"Setting control thread event for {control_thread_name}")
+        self.__control_threads_events[control_thread_name] = event
+
+    def set_temperature_setpoint(self, temperature_setpoint: float) -> None:
+        print(f"Setting temperature setpoint to {temperature_setpoint} C")
+        self.__temperature_setpoint = temperature_setpoint
+
+    def get_temperature_setpoint(self) -> float:
+        return self.__temperature_setpoint
+    
+    def set_humidity_setpoint(self, humidity_setpoint: float) -> None:
+        print(f"Setting humidity setpoint to {humidity_setpoint} %")
+        self.__humidity_setpoint = humidity_setpoint
+
+    def get_humidity_setpoint(self) -> float:
+        return self.__humidity_setpoint
+    
+    def set_light_setpoint(self, light_setpoint: float) -> None:
+        print(f"Setting light setpoint to {light_setpoint} lux")
+        self.__light_setpoint = light_setpoint
+
+    def get_light_setpoint(self) -> float:
+        return self.__light_setpoint
+    
+    def set_soil_ph_setpoint(self, soil_ph_setpoint: float) -> None:
+        print(f"Setting soil pH setpoint to {soil_ph_setpoint}")
+        self.__soil_ph_setpoint = soil_ph_setpoint
+
+    def get_soil_ph_setpoint(self) -> float:
+        return self.__soil_ph_setpoint
+    
+    def set_soil_ec_setpoint(self, soil_ec_setpoint: float) -> None:
+        print(f"Setting soil EC setpoint to {soil_ec_setpoint} mS/cm")
+        self.__soil_ec_setpoint = soil_ec_setpoint
+
+    def get_soil_ec_setpoint(self) -> float:
+        return self.__soil_ec_setpoint
+    
+    def set_soil_temp_setpoint(self, soil_temp_setpoint: float) -> None:
+        print(f"Setting soil temperature setpoint to {soil_temp_setpoint} C")
+        self.__soil_temp_setpoint = soil_temp_setpoint
+
+    def get_soil_temp_setpoint(self) -> float:
+        return self.__soil_temp_setpoint
+    
+    def set_soil_humidity_setpoint(self, soil_humidity_setpoint: float) -> None:
+        print(f"Setting soil humidity setpoint to {soil_humidity_setpoint} %")
+        self.__soil_humidity_setpoint = soil_humidity_setpoint
+
+    def get_soil_humidity_setpoint(self) -> float:
+        return self.__soil_humidity_setpoint
+    
+    def set_water_flow_setpoint(self, water_flow_setpoint: float) -> None:
+        print(f"Setting water flow setpoint to {water_flow_setpoint} L/h")
+        self.__water_flow_setpoint = water_flow_setpoint
+
+    def get_water_flow_setpoint(self) -> float:
+        return self.__water_flow_setpoint
+
+    def get_all_setpoints(self) -> dict:
+        return {
+            "temperature_setpoint": self.__temperature_setpoint,
+            "humidity_setpoint": self.__humidity_setpoint,
+            "light_setpoint": self.__light_setpoint,
+            "soil_ph_setpoint": self.__soil_ph_setpoint,
+            "soil_ec_setpoint": self.__soil_ec_setpoint,
+            "soil_temp_setpoint": self.__soil_temp_setpoint,
+            "soil_humidity_setpoint": self.__soil_humidity_setpoint,
+            "water_flow_setpoint": self.__water_flow_setpoint,
+        }
+    
+    def set_light_kp(self, kp: float) -> None:
+        """Set the light control PID Kp value"""
+        print(f"Setting light control PID Kp to {kp}")
+        self.__light_kp = kp
+
+    def get_light_kp(self) -> float:
+        """Get the light control PID Kp value"""
+        return self.__light_kp
+    
+    def set_light_ki(self, ki: float) -> None:
+        """Set the light control PID Ki value"""
+        print(f"Setting light control PID Ki to {ki}")
+        self.__light_ki = ki
+
+    def get_light_ki(self) -> float:
+        """Get the light control PID Ki value"""
+        return self.__light_ki
+    
+    def set_light_kd(self, kd: float) -> None:
+        """Set the light control PID Kd value"""
+        print(f"Setting light control PID Kd to {kd}")
+        self.__light_kd = kd
+
+    def get_light_kd(self) -> float:
+        """Get the light control PID Kd value"""
+        return self.__light_kd
+    
+    def set_temperature_kp(self, kp: float) -> None:
+        """Set the temperature control PID Kp value"""
+        print(f"Setting temperature control PID Kp to {kp}")
+        self.__temperature_kp = kp
+
+    def get_temperature_kp(self) -> float:
+        """Get the temperature control PID Kp value"""
+        return self.__temperature_kp
+    
+    def set_temperature_ki(self, ki: float) -> None:
+        """Set the temperature control PID Ki value"""
+        print(f"Setting temperature control PID Ki to {ki}")
+        self.__temperature_ki = ki
+
+    def get_temperature_ki(self) -> float:
+        """Get the temperature control PID Ki value"""
+        return self.__temperature_ki
+    
+    def set_temperature_kd(self, kd: float) -> None:
+        """Set the temperature control PID Kd value"""
+        print(f"Setting temperature control PID Kd to {kd}")
+        self.__temperature_kd = kd
+    
+    def get_temperature_kd(self) -> float:
+        """Get the temperature control PID Kd value"""
+        return self.__temperature_kd
+    
+    

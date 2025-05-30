@@ -96,10 +96,7 @@ def serial_logger_task(sensors, actuators, temp_sem, light_sem, soil_sem, flow_s
                 
             if acquired or not soil_sem:
                 try:
-                    soil_ph = sensors.get_soil_ph()
-                    soil_ec = sensors.get_soil_ec()
-                    soil_temp = sensors.get_soil_temp()
-                    soil_hum = sensors.get_soil_humidity()
+                    soil_ph, soil_ec, soil_hum, soil_temp = sensors.get_soil_values()
                     soil_ph = f"{soil_ph:.1f}" if isinstance(soil_ph, (int, float)) else "Read Error"
                     soil_ec = f"{soil_ec:.1f}" if isinstance(soil_ec, (int, float)) else "Read Error"
                     soil_temp = f"{soil_temp:.1f}" if isinstance(soil_temp, (int, float)) else "Read Error"
@@ -137,7 +134,7 @@ def serial_logger_task(sensors, actuators, temp_sem, light_sem, soil_sem, flow_s
                  
             if acquired or not flow_sem:
                 try:
-                    flow = sensors.get_water_flow()
+                    flow = sensors.get_water_flow_rate()
                     flow = f"{flow:.2f}" if isinstance(flow, (int, float)) else "Read Error"
                 except Exception as e:
                     print(f"Logger Error reading Flow: {e}")
@@ -340,7 +337,7 @@ def serial_logger_task(sensors, actuators, temp_sem, light_sem, soil_sem, flow_s
             ("Voltage", local_latest_data['electricity_voltage'], "V"),
             ("Current", local_latest_data['electricity_current'], "A"),
             ("Power", local_latest_data['electricity_power'], "W"),
-            ("Energy", local_latest_data['electricity_energy'], "kWh"),
+            ("Energy", local_latest_data['electricity_energy'], "Wh"),
             ("Frequency", local_latest_data['electricity_frequency'], "Hz"),
             ("Power Factor", local_latest_data['electricity_pf'], "PF"),
             ("Alarm Status", local_latest_data['electricity_alarm'], "")

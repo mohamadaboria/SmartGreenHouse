@@ -92,10 +92,7 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
             if soil_sem: acquired = soil_sem.acquire(blocking=False)
             if acquired or not soil_sem:
                 try:
-                    soil_ph = sensors.get_soil_ph()
-                    soil_ec = sensors.get_soil_ec()
-                    soil_temp = sensors.get_soil_temp()
-                    soil_hum = sensors.get_soil_humidity()
+                    soil_ph, soil_ec, soil_humidity, soil_temp = env_sensors.get_soil_values()
                     current_state["soil_ph"] = soil_ph if isinstance(soil_ph, (int, float)) else "Read Error"
                     current_state["soil_ec"] = soil_ec if isinstance(soil_ec, (int, float)) else "Read Error"
                     current_state["soil_temp"] = soil_temp if isinstance(soil_temp, (int, float)) else "Read Error"
@@ -116,7 +113,7 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
             if flow_sem: acquired = flow_sem.acquire(blocking=False)
             if acquired or not flow_sem:
                 try:
-                    flow = sensors.get_water_flow()
+                    flow = sensors.get_water_flow_rate()
                     current_state["water_flow"] = flow if isinstance(flow, (int, float)) else "Read Error"
                 except Exception as e: print(f"Logger Error reading Flow: {e}"); current_state["water_flow"] = "Exception"
                 finally: 

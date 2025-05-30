@@ -183,6 +183,10 @@ soil_semaphore = threading.Semaphore(1)
 soil_pause_event = threading.Event()
 soil_pause_event.set()
 
+electricity_semaphore = threading.Semaphore(1)
+electricity_pause_event = threading.Event()
+electricity_pause_event.set()
+
 water_flow_semaphore = threading.Semaphore(1)
 
 def temperature_sp_adjustment_task():
@@ -430,7 +434,7 @@ def app_task():
     prev_water_pump_duty_cycle = 0.0
 
     # start the serial logger task
-    serial_logger_thread = threading.Thread(target=serial_logger_task, args=(env_sensors, env_actuators, temperature_semaphore, light_semaphore, soil_semaphore, water_flow_semaphore))
+    serial_logger_thread = threading.Thread(target=serial_logger_task, args=(env_sensors, env_actuators, temperature_semaphore, light_semaphore, soil_semaphore, water_flow_semaphore, electricity_semaphore))
     serial_logger_thread.start()
     
     # set manual operation mode

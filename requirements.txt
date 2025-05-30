@@ -1,7 +1,16 @@
 adafruit-circuitpython-dht
+adafruit-circuitpython-veml7700
 adafruit-circuitpython-ads1x15
 numpy
 RPi.GPIO
 pigpio
+lgpio
 git+https://github.com/hhk7734/python3-gpiod.git
 pyserial
+paho-mqtt
+pymongo
+boto3
+pandas
+simple-pid
+gekko
+matplotlib

@@ -20,11 +20,11 @@ latest_data = {
     # Add keys for mode and setpoints
     "mode": "N/A",
     "temp_sp": "N/A", 
-    "hum_sp": "N/A",
+    # "hum_sp": "N/A",
     "light_sp": "N/A",
-    "soil_ph_sp": "N/A",
-    "soil_ec_sp": "N/A",
-    "soil_temp_sp": "N/A",
+    # "soil_ph_sp": "N/A",
+    # "soil_ec_sp": "N/A",
+    # "soil_temp_sp": "N/A",
     "soil_hum_sp": "N/A",
     "flow_sp": "N/A"
 }
@@ -92,7 +92,7 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
             if soil_sem: acquired = soil_sem.acquire(blocking=False)
             if acquired or not soil_sem:
                 try:
-                    soil_ph, soil_ec, soil_humidity, soil_temp = env_sensors.get_soil_values()
+                    soil_ph, soil_ec, soil_humidity, soil_temp = sensors.get_soil_values()
                     current_state["soil_ph"] = soil_ph if isinstance(soil_ph, (int, float)) else "Read Error"
                     current_state["soil_ec"] = soil_ec if isinstance(soil_ec, (int, float)) else "Read Error"
                     current_state["soil_temp"] = soil_temp if isinstance(soil_temp, (int, float)) else "Read Error"
@@ -197,11 +197,11 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
             try:
                 current_state["mode"] = setpoints.operation_mode
                 current_state["temp_sp"] = setpoints.get_temperature_setpoint()
-                current_state["hum_sp"] = setpoints.get_humidity_setpoint()
+                # current_state["hum_sp"] = setpoints.get_humidity_setpoint()
                 current_state["light_sp"] = setpoints.get_light_setpoint()
-                current_state["soil_ph_sp"] = setpoints.get_soil_ph_setpoint()
-                current_state["soil_ec_sp"] = setpoints.get_soil_ec_setpoint()
-                current_state["soil_temp_sp"] = setpoints.get_soil_temp_setpoint()
+                # current_state["soil_ph_sp"] = setpoints.get_soil_ph_setpoint()
+                # current_state["soil_ec_sp"] = setpoints.get_soil_ec_setpoint()
+                # current_state["soil_temp_sp"] = setpoints.get_soil_temp_setpoint()
                 current_state["soil_hum_sp"] = setpoints.get_soil_humidity_setpoint()
                 current_state["flow_sp"] = setpoints.get_water_flow_setpoint() # L/h from class
             except Exception as e:
@@ -301,10 +301,14 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
         right_lines.append(right_sep)
 
         setpoints_to_print = [
-            ("Temp SP", "temp_sp", "C"), ("Humidity SP", "hum_sp", "%"),
-            ("Light SP", "light_sp", "Lux"), ("Soil pH SP", "soil_ph_sp", "pH"),
-            ("Soil EC SP", "soil_ec_sp", "uS/cm"), ("Soil Temp SP", "soil_temp_sp", "C"),
-            ("Soil Humidity SP", "soil_hum_sp", "%"), ("Water Flow SP", "flow_sp", "L/h") # Use L/h as per class
+            ("Temp SP", "temp_sp", "C"),
+            # ("Humidity SP", "hum_sp", "%"),
+            ("Light SP", "light_sp", "Lux"),
+            # ("Soil pH SP", "soil_ph_sp", "pH"),
+            # ("Soil EC SP", "soil_ec_sp", "uS/cm"),
+            # ("Soil Temp SP", "soil_temp_sp", "C"),
+            ("Soil Humidity SP", "soil_hum_sp", "%"),
+            ("Water Flow SP", "flow_sp", "L/h") # Use L/h as per class
         ]
         for name, key, unit in setpoints_to_print:
             val_str = format_value(current_state.get(key, "N/A"), unit)

@@ -40,7 +40,10 @@ env_sensors.set_water_flow_sensor_pin(water_flow_sensor_pin)
 # initialize the application actuators
 env_actuators = GH_Actuators(0x30, i2c, 'big')
 # reset the esp
-env_actuators.restart_esp32()
+while not env_actuators.restart_esp32():
+    print("Restarting ESP32...")
+    time.sleep(5)
+    
 last_date_time = datetime.datetime.now()
 print("Initializing actuators...", end='')
 while datetime.datetime.now() - last_date_time < datetime.timedelta(seconds=10):

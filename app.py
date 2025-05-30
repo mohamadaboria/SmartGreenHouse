@@ -43,7 +43,7 @@ env_actuators = GH_Actuators(0x30, i2c, 'big')
 while not env_actuators.restart_esp32():
     print("Restarting ESP32...")
     time.sleep(5)
-    
+
 last_date_time = datetime.datetime.now()
 print("Initializing actuators...", end='')
 while datetime.datetime.now() - last_date_time < datetime.timedelta(seconds=10):
@@ -436,12 +436,9 @@ def app_task():
     prev_fan_duty_cycle = 0.0
     prev_water_pump_duty_cycle = 0.0
 
-    # start the serial logger task
-    serial_logger_thread = threading.Thread(target=serial_logger_task, args=(env_sensors, env_actuators, temperature_semaphore, light_semaphore, soil_semaphore, water_flow_semaphore, electricity_semaphore))
-    serial_logger_thread.start()
-    
     # set manual operation mode
     setpoints.set_operation_mode("manual")
+    
     while True:
 
         if (datetime.datetime.now() - last_sensor_update).total_seconds() > 30:
@@ -644,12 +641,14 @@ if __name__ == "__main__":
 
     # create the threads
     app_thread = threading.Thread(target=app_task)
+    serial_logger_thread = threading.Thread(target=serial_logger_task, args=(env_sensors, env_actuators, setpoints, temperature_semaphore, light_semaphore, soil_semaphore, water_flow_semaphore, electricity_semaphore))
     temperature_thread = threading.Thread(target=temperature_sp_adjustment_task)
     light_thread = threading.Thread(target=light_sp_adjustment_task)
     soil_thread = threading.Thread(target=set_soil_moisture_setpoint_task)
 
     # start the threads
     app_thread.start()
+    serial_logger_thread.start()
     temperature_thread.start()
     light_thread.start()
     soil_thread.start()

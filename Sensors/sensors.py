@@ -11,6 +11,7 @@ from .soil import SoilSensor
 from .air import AirSensor
 from .electricity import ElectricitySensor
 from .light import LightSensor
+from .water import WaterFlowSensor
 
 class GH_Sensors:
     """
@@ -38,62 +39,23 @@ class GH_Sensors:
         self.air_sensor = AirSensor()
         self.electricity_sensor = ElectricitySensor()
         self.light_sensor = LightSensor(ads_sensor=self.__ads_sensor, ads_channels=self.__ads_channels, I2C=self.__general_i2c)        
-        # Water flow sensor variables
-        self.__water_flow_running = False
-        self.__flow_rate = 0.0
+        self.water_flow_sensor = WaterFlowSensor()
 
-    # Water flow sensor functions
     def set_water_flow_sensor_pin(self, pin):
         """Set up the water flow sensor with the specified pin"""
-        self.__water_flow_sensor_pin = pin
-        # set the pin of RE & RD
-        self.__water_flow_sensor_pin = self.chip.get_line(pin)        
-        config = gpiod.line_request()
-        config.consumer = "Water_Flow"
-        config.request_type = gpiod.line_request.EVENT_BOTH_EDGES        
-        self.__water_flow_sensor_pin.request(config=config, default_val=0)
-        self.__counter = 0
-        self.__water_flow_running = True
-        self.__flow_rate = 0.0
-        def water_flow_pulse_counter():
-            while self.__water_flow_running:
-                if self.__water_flow_sensor_pin.event_wait(timedelta(seconds=1)):
-                    event = self.__water_flow_sensor_pin.event_read()
-                    if event.event_type == gpiod.line_event.RISING_EDGE:
-                        self.__counter += 1
-        
-        def calculate_flow_rate():
-            start_time = time.time()
-            PULSES_PER_LITRE = 450.0  # pulses per litre for the flow sensor
-            while self.__water_flow_running:
-                time.sleep(1)
-                elapsed_time = time.time() - start_time
-                self.__flow_rate = (self.__counter / PULSES_PER_LITRE) / (elapsed_time / 60.0)  # litres per minute
-                print(f"Flow Rate: {self.__flow_rate:.2f} L/min")
-                self.__counter = 0  # reset the counter for the next interval
-                start_time = time.time()  # reset the start time for the next interval                
-
-        # start a thread to count the pulses
-        self.__water_flow_thread = threading.Thread(target=water_flow_pulse_counter, daemon=True)
-        self.__water_flow_thread.start()
-
-        # start a thread to calculate the flow rate
-        self.__flow_rate_thread = threading.Thread(target=calculate_flow_rate, daemon=True)
-        self.__flow_rate_thread.start()
+        self.water_flow_sensor.set_water_flow_sensor_pin(pin)
 
     def get_water_flow_rate(self):
         """Get water flow rate in liters per minute"""
-        try:
-            return self.__flow_rate
-        except RuntimeError as err:
-            print(f'Sensor Error: {err.args[0]}')
-            return 0    
-        except KeyboardInterrupt:
-            print("Stopping water flow sensor thread.")
-            self.__water_flow_running = False
-            self.__water_flow_thread.join()
-            self.__flow_rate_thread.join()
-            return self.__flow_rate
+        return self.water_flow_sensor.get_water_flow_rate()
+
+    def get_total_water_amount(self):
+        """Get total water amount in liters"""
+        return self.water_flow_sensor.get_total_water_amount()
+
+    def reset_water_amount(self):
+        """Reset the total water amount to zero"""
+        return self.water_flow_sensor.reset_water_amount()
 
     # Soil sensor functions - delegated to soil_sensor
     def set_soil_sensor_pins(self):
@@ -185,3 +147,7 @@ class GH_Sensors:
         Returns voltage, current, power, energy, frequency, power_factor, alarm respectively.
         """
         return self.electricity_sensor.get_electricity_values()
+    
+    def reset_energy(self):
+        """Reset the energy value in the electricity sensor"""
+        return self.electricity_sensor.reset_energy()

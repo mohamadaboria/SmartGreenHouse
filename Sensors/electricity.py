@@ -120,3 +120,32 @@ class ElectricitySensor:
         except Exception as err:
             print(f'Sensor Error: {err.args[0]}')
             return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+
+
+    def reset_energy(self):
+        """Reset the energy value in the electricity sensor"""
+        try:
+            # send reset command
+            buf = [0x01, 0x42]
+            crc = self.__electricity_modbus_crc16(buf)
+            buf.append(crc & 0xFF)
+            buf.append((crc >> 8) & 0xFF)
+            self.__elec_uart.write(buf)
+            time.sleep(0.1)
+            resp = self.__get_electricity_modbus_response(False)
+
+            if resp is None or len(resp) != 4 or resp[0] != 0x01 or resp[1] != 0x42:
+                print("Invalid response for Electricity reset request!")
+                return False
+            
+            rcvd_crc = struct.unpack("<H", resp[2:4])[0]
+            calc_crc = self.__electricity_modbus_crc16(resp[:-2])
+            if rcvd_crc != calc_crc:
+                print("CRC mismatch!")
+                return False
+
+            print("Energy reset successfully!")
+            return True
+        except Exception as err:
+            print(f'Sensor Error: {err.args[0]}')
+            return False

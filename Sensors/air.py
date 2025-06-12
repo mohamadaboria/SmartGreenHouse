@@ -3,7 +3,7 @@ import adafruit_dht
 class AirSensor:
     """
     Class for handling air-related sensor functionality including:
-    - Temperature and humidity  via DHT22 sensor
+    - Temperature and humidity via DHT22 sensor
     """
     def __init__(self):
         self.__prev_temp = 0.0

@@ -4,7 +4,7 @@ import os
 import board
 import busio
 import numpy as np
-
+import picamera2
 # Job IDs (Upper 3 bits of the first byte)
 JOB_INIT_PWM = 0b000  # Initialize PWM (8 bytes)
 JOB_SET_DUTY = 0b001  # Set PWM Duty Cycle (2 bytes)
@@ -284,3 +284,30 @@ class GH_Actuators:
         except AttributeError:
             print("Light strip 2 not initialized.")
             return 0
+        
+    def stop_all_actuators(self) -> bool:
+        try:
+            # Set all duty cycles to 0
+            while not self.set_water_pump_duty_cycle(0):
+                time.sleep(0.1)
+
+            while not self.set_heater_duty_cycle(0):
+                time.sleep(0.1)
+            
+            while not self.set_heater_fan_duty_cycle(0):
+                time.sleep(0.1)
+
+            while not self.set_fan_duty_cycle(0):
+                time.sleep(0.1)
+
+            while not self.set_light_strip_1_duty_cycle(0):
+                time.sleep(0.1)
+
+            while not self.set_light_strip_2_duty_cycle(0):
+                time.sleep(0.1)
+                
+            print("All actuators stopped.")
+            return True
+        except Exception as e:
+            print(f"Error stopping all actuators: {e}")
+            return False

@@ -37,6 +37,16 @@ class MongoDBHandler:
             'timestamp': ''
         }
 
+    def resource_field_doc_temp(self, resource_id, resource_type, resource_value, unit=None):
+        return {
+            '_id': '',
+            'resource_id': resource_id,
+            'resource_type': resource_type,
+            'resource_value': resource_value,
+            'resource_unit': unit if unit else '',
+            'timestamp': ''            
+        }
+
     def create_collection(self, collection_name, key, fields):
         self.__pi_data_map[key] = {
             'collection': self.__db[collection_name],
@@ -77,6 +87,18 @@ class MongoDBHandler:
             return True
         except Exception as e:
             print(f"Error inserting image data: {e}")
+            return False
+
+    def insert_resource_data(self, key, resource_value):
+        try:
+            timestamp_val = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.__pi_data_map[key]['fields']['_id'] = self.__pi_data_map[key]['fields']['resource_id'] + timestamp_val.replace(" ", "").replace(":", "").replace("-", "") + str(int(time.time()))
+            self.__pi_data_map[key]['fields']['resource_value'] = resource_value
+            self.__pi_data_map[key]['fields']['timestamp'] = timestamp_val
+            self.__pi_data_map[key]['collection'].insert_one(self.__pi_data_map[key]['fields'])
+            return True
+        except Exception as e:
+            print(f"Error inserting resource data: {e}")
             return False
 
     def get_data(self, key):
@@ -126,3 +148,5 @@ class MongoDBHandler:
         except Exception as e:
             print(f"Error closing connection: {e}")
             return False
+
+    

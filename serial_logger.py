@@ -1,11 +1,11 @@
-# --- Serial Logger with Side-by-Side Mode/Setpoints Table --- 
+# --- Serial Logger with 3 Tables (Sensors/Actuators | Mode/Setpoints + Resources) --- 
 
 import os
 import time
 import datetime
 import threading
 
-# Global dictionary to store the latest sensor and actuator data for display
+# Global dictionary to store the latest data for display
 latest_data = {
     "timestamp": "N/A",
     "temperature": "N/A", "humidity": "N/A",
@@ -17,24 +17,22 @@ latest_data = {
     "light_intensity": "N/A",
     "heater_dc": "N/A", "heater_fan_dc": "N/A", "light_strip_1_dc": "N/A",
     "light_strip_2_dc": "N/A", "water_pump_dc": "N/A", "fan_dc": "N/A",
-    # Add keys for mode and setpoints
     "mode": "N/A",
-    "temp_sp": "N/A", 
-    # "hum_sp": "N/A",
-    "light_sp": "N/A",
-    # "soil_ph_sp": "N/A",
-    # "soil_ec_sp": "N/A",
-    # "soil_temp_sp": "N/A",
-    "soil_hum_sp": "N/A",
-    "flow_sp": "N/A"
+    "temp_sp": "N/A", "hum_sp": "N/A", "light_sp": "N/A",
+    "soil_ph_sp": "N/A", "soil_ec_sp": "N/A", "soil_temp_sp": "N/A",
+    "soil_hum_sp": "N/A", "flow_sp": "N/A",
+    "water_consumed": 0.0 # Initialize cumulative water
 }
 
 # Lock for safely updating/reading latest_data 
 data_lock = threading.Lock()
 
 def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_sem, flow_sem, electricity_sem):
-    """Reads data, mode, setpoints; prints side-by-side tables."""
+    """Reads data, mode, setpoints, resources; prints 3 tables."""
     global latest_data
+    
+    # Initialize cumulative water consumption within the task scope
+    cumulative_water_liters = 0.0
     
     last_read_datetimes = {
         "temp_humidity": datetime.datetime.min,
@@ -43,7 +41,7 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
         "electricity": datetime.datetime.min,
         "light": datetime.datetime.min,
         "actuators": datetime.datetime.min,
-        "setpoints": datetime.datetime.min # Read setpoints every second
+        "setpoints": datetime.datetime.min
     }
     
     intervals = {
@@ -53,18 +51,18 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
         "electricity": datetime.timedelta(seconds=10),
         "light": datetime.timedelta(seconds=3),
         "actuators": datetime.timedelta(seconds=1),
-        "setpoints": datetime.timedelta(seconds=1) # Read setpoints every second
+        "setpoints": datetime.timedelta(seconds=1)
     }
 
     while True:
         now = datetime.datetime.now()
         current_timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
         
-        # Use a local copy to build the current state
         current_state = {}
         current_state["timestamp"] = current_timestamp_str
 
-        # --- Read Sensors/Actuators (using previous logic, storing in current_state) --- 
+        # --- Read Sensors/Actuators --- 
+        # (Logic largely unchanged, stores results in current_state)
         # Temperature & Humidity (5s)
         if now >= last_read_datetimes["temp_humidity"] + intervals["temp_humidity"]:
             temp, humid = "N/A", "N/A"
@@ -87,7 +85,6 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
 
         # Soil Sensors (3s)
         if now >= last_read_datetimes["soil"] + intervals["soil"]:
-            soil_ph, soil_ec, soil_temp, soil_hum = "N/A", "N/A", "N/A", "N/A"
             acquired = False
             if soil_sem: acquired = soil_sem.acquire(blocking=False)
             if acquired or not soil_sem:
@@ -106,15 +103,20 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
         else:
              with data_lock: current_state["soil_ph"] = latest_data["soil_ph"]; current_state["soil_ec"] = latest_data["soil_ec"]; current_state["soil_temp"] = latest_data["soil_temp"]; current_state["soil_humidity"] = latest_data["soil_humidity"]
 
-        # Water Flow (1s)
+        # Water Flow (1s) & Calculate Cumulative Water
         if now >= last_read_datetimes["flow"] + intervals["flow"]:
             flow = "N/A"
             acquired = False
             if flow_sem: acquired = flow_sem.acquire(blocking=False)
             if acquired or not flow_sem:
                 try:
-                    flow = sensors.get_water_flow_rate()
-                    current_state["water_flow"] = flow if isinstance(flow, (int, float)) else "Read Error"
+                    flow = sensors.get_water_flow_rate() # L/min
+                    if isinstance(flow, (int, float)):
+                        current_state["water_flow"] = flow
+                        # Add water consumed in the last second (flow L/min * 1 min/60 sec * 1 sec)
+                        cumulative_water_liters = sensors.get_total_water_amount() 
+                    else:
+                        current_state["water_flow"] = "Read Error"
                 except Exception as e: print(f"Logger Error reading Flow: {e}"); current_state["water_flow"] = "Exception"
                 finally: 
                     if acquired: flow_sem.release()
@@ -123,6 +125,8 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
                 with data_lock: current_state["water_flow"] = latest_data["water_flow"]
         else:
             with data_lock: current_state["water_flow"] = latest_data["water_flow"]
+        # Store cumulative water in state for display
+        current_state["water_consumed"] = cumulative_water_liters 
 
         # Electricity (10s)
         if now >= last_read_datetimes["electricity"] + intervals["electricity"]:
@@ -130,18 +134,16 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
             if electricity_sem: acquired = electricity_sem.acquire(blocking=False)
             if acquired or not electricity_sem:
                 try:
-                    if hasattr(sensors, 'get_electricity_values'):
                         voltage, current, power, energy, frequency, power_factor, alarm = sensors.get_electricity_values()
                         current_state["electricity_voltage"] = voltage if isinstance(voltage, (int, float)) else "Read Error"
                         current_state["electricity_current"] = current if isinstance(current, (int, float)) else "Read Error"
                         current_state["electricity_power"] = power if isinstance(power, (int, float)) else "Read Error"
-                        current_state["electricity_energy"] = energy if isinstance(energy, (int, float)) else "Read Error"
+                        current_state["electricity_energy"] = energy if isinstance(energy, (int, float)) else "Read Error" # This is the cumulative energy
                         current_state["electricity_frequency"] = frequency if isinstance(frequency, (int, float)) else "Read Error"
                         current_state["electricity_pf"] = power_factor if isinstance(power_factor, (int, float)) else "Read Error"
                         current_state["electricity_alarm"] = str(alarm)
-                    else:
-                        current_state["electricity_voltage"] = "Not Impl."; current_state["electricity_current"] = "Not Impl."; current_state["electricity_power"] = "Not Impl."; current_state["electricity_energy"] = "Not Impl."; current_state["electricity_frequency"] = "Not Impl."; current_state["electricity_pf"] = "Not Impl."; current_state["electricity_alarm"] = "Not Impl."
-                except Exception as e: print(f"Logger Error reading Electricity: {e}"); current_state["electricity_voltage"] = "Ex"; current_state["electricity_current"] = "Ex"; current_state["electricity_power"] = "Ex"; current_state["electricity_energy"] = "Ex"; current_state["electricity_frequency"] = "Ex"; current_state["electricity_pf"] = "Ex"; current_state["electricity_alarm"] = "Ex"
+                except Exception as e: 
+                    print(f"Logger Error reading Electricity: {e}"); current_state["electricity_voltage"] = "Ex"; current_state["electricity_current"] = "Ex"; current_state["electricity_power"] = "Ex"; current_state["electricity_energy"] = "Ex"; current_state["electricity_frequency"] = "Ex"; current_state["electricity_pf"] = "Ex"; current_state["electricity_alarm"] = "Ex"
                 finally: 
                     if acquired: electricity_sem.release()
                 last_read_datetimes["electricity"] = now
@@ -152,7 +154,6 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
 
         # Light Intensity (3s)
         if now >= last_read_datetimes["light"] + intervals["light"]:
-            light = "N/A"
             acquired = False
             if light_sem: acquired = light_sem.acquire(blocking=False)
             if acquired or not light_sem:
@@ -203,10 +204,8 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
                 # current_state["soil_ec_sp"] = setpoints.get_soil_ec_setpoint()
                 # current_state["soil_temp_sp"] = setpoints.get_soil_temp_setpoint()
                 current_state["soil_hum_sp"] = setpoints.get_soil_humidity_setpoint()
-                current_state["flow_sp"] = setpoints.get_water_flow_setpoint() # L/h from class
-            except Exception as e:
-                print(f"Logger Error reading Setpoints: {e}")
-                current_state["mode"] = "Error"; current_state["temp_sp"] = "Error"; current_state["hum_sp"] = "Error"; current_state["light_sp"] = "Error"; current_state["soil_ph_sp"] = "Error"; current_state["soil_ec_sp"] = "Error"; current_state["soil_temp_sp"] = "Error"; current_state["soil_hum_sp"] = "Error"; current_state["flow_sp"] = "Error"
+                # current_state["flow_sp"] = setpoints.get_water_flow_setpoint()
+            except Exception as e: print(f"Logger Error reading Setpoints: {e}"); current_state["mode"] = "Error"; current_state["temp_sp"] = "Error"; current_state["hum_sp"] = "Error"; current_state["light_sp"] = "Error"; current_state["soil_ph_sp"] = "Error"; current_state["soil_ec_sp"] = "Error"; current_state["soil_temp_sp"] = "Error"; current_state["soil_hum_sp"] = "Error"; current_state["flow_sp"] = "Error"
             last_read_datetimes["setpoints"] = now
         else:
             with data_lock: current_state["mode"] = latest_data["mode"]; current_state["temp_sp"] = latest_data["temp_sp"]; current_state["hum_sp"] = latest_data["hum_sp"]; current_state["light_sp"] = latest_data["light_sp"]; current_state["soil_ph_sp"] = latest_data["soil_ph_sp"]; current_state["soil_ec_sp"] = latest_data["soil_ec_sp"]; current_state["soil_temp_sp"] = latest_data["soil_temp_sp"]; current_state["soil_hum_sp"] = latest_data["soil_hum_sp"]; current_state["flow_sp"] = latest_data["flow_sp"]
@@ -216,34 +215,27 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
             latest_data.update(current_state)
 
         # --- Formatting --- 
-        # Define column widths
-        left_col1_width = 18 # Sensor/Actuator Name
-        left_col2_width = 18 # Sensor/Actuator Value
-        right_col1_width = 18 # Setpoint Name
-        right_col2_width = 12 # Setpoint Value
+        left_col1_width = 18; left_col2_width = 18
+        right_col1_width = 18; right_col2_width = 12
         separator = " | "
-        
         left_total_width = left_col1_width + left_col2_width + 3
         right_total_width = right_col1_width + right_col2_width + 3
 
-        # Helper for formatting values with units
         def format_value(value, unit):
             if isinstance(value, (int, float)):
-                if unit == "kWh": formatted_val = f"{value:.3f}"
+                if unit == "Wh" or unit == "L": formatted_val = f"{value:.3f}"
                 elif unit in ["A", "PF", "L/min", "L/h"]: formatted_val = f"{value:.2f}"
                 elif unit == "Lux": formatted_val = f"{value:.0f}"
                 elif isinstance(value, float): formatted_val = f"{value:.1f}"
                 else: formatted_val = str(value)
                 return f"{formatted_val} {unit}" if unit else formatted_val
-            else:
-                return str(value)
+            else: return str(value)
 
         # Build Left Table (Sensors/Actuators)
         left_lines = []
         left_sep =    '+' + '-' * left_col1_width + '+' + '-' * left_col2_width + '+'
         left_header = '|' + " Sensor".ljust(left_col1_width) + '|' + " Value".ljust(left_col2_width) + '|'
         act_header =  '|' + " Actuator".ljust(left_col1_width) + '|' + " Duty Cycle (Raw%)".ljust(left_col2_width) + '|'
-        
         left_lines.append(left_sep)
         left_lines.append('|' + " Greenhouse Monitor".center(left_total_width - 2) + '|')
         left_lines.append(left_sep)
@@ -251,25 +243,22 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
         left_lines.append(left_sep)
         left_lines.append(left_header)
         left_lines.append(left_sep)
-
         sensors_to_print = [
             ("Temp (Air)", "temperature", "C"), ("Humidity (Air)", "humidity", "%"),
             ("Light Intensity", "light_intensity", "Lux"), ("Soil pH", "soil_ph", "pH"),
             ("Soil EC", "soil_ec", "uS/cm"), ("Soil Temp", "soil_temp", "C"),
             ("Soil Humidity", "soil_humidity", "%"), ("Water Flow", "water_flow", "L/min"),
             ("Voltage", "electricity_voltage", "V"), ("Current", "electricity_current", "A"),
-            ("Power", "electricity_power", "W"), ("Energy", "electricity_energy", "kWh"),
+            ("Power", "electricity_power", "W"), ("Energy", "electricity_energy", "Wh"), # Display instantaneous energy here
             ("Frequency", "electricity_frequency", "Hz"), ("Power Factor", "electricity_pf", "PF"),
             ("Alarm Status", "electricity_alarm", "")
         ]
         for name, key, unit in sensors_to_print:
             val_str = format_value(current_state.get(key, "N/A"), unit)
             left_lines.append('|' + f" {name}".ljust(left_col1_width) + '|' + f" {val_str}".ljust(left_col2_width) + '|')
-
         left_lines.append(left_sep)
         left_lines.append(act_header)
         left_lines.append(left_sep)
-
         max_dc = 4095
         actuators_to_print = [
             ("Heater", "heater_dc"), ("Heater Fan", "heater_fan_dc"),
@@ -278,51 +267,61 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
         ]
         for name, key in actuators_to_print:
             dc = current_state.get(key, "N/A")
-            if isinstance(dc, (int, float)):
-                dc_perc = (dc / max_dc * 100) if max_dc > 0 else 0
-                val_str = f"{dc:<4} ({dc_perc:.1f}%)"
+            if isinstance(dc, (int, float)): val_str = f"{dc:<4} ({(dc / max_dc * 100) if max_dc > 0 else 0:.1f}%)"
             else: val_str = str(dc)
             left_lines.append('|' + f" {name}".ljust(left_col1_width) + '|' + f" {val_str}".ljust(left_col2_width) + '|')
         left_lines.append(left_sep)
 
-        # Build Right Table (Mode/Setpoints)
-        right_lines = []
+        # Build Right Top Table (Mode/Setpoints)
+        right_top_lines = []
         right_sep =    '+' + '-' * right_col1_width + '+' + '-' * right_col2_width + '+'
         right_header = '|' + " Mode / Setpoint".ljust(right_col1_width) + '|' + " Value".ljust(right_col2_width) + '|'
-        
-        right_lines.append(right_sep)
-        right_lines.append('|' + " Control Status".center(right_total_width - 2) + '|')
-        right_lines.append(right_sep)
-        right_lines.append(right_header)
-        right_lines.append(right_sep)
-
+        right_top_lines.append(right_sep)
+        right_top_lines.append('|' + " Control Status".center(right_total_width - 2) + '|')
+        right_top_lines.append(right_sep)
+        right_top_lines.append(right_header)
+        right_top_lines.append(right_sep)
         mode_str = str(current_state.get("mode", "N/A"))
-        right_lines.append('|' + " Mode".ljust(right_col1_width) + '|' + f" {mode_str}".ljust(right_col2_width) + '|')
-        right_lines.append(right_sep)
-
+        right_top_lines.append('|' + " Mode".ljust(right_col1_width) + '|' + f" {mode_str}".ljust(right_col2_width) + '|')
+        right_top_lines.append(right_sep)
         setpoints_to_print = [
             ("Temp SP", "temp_sp", "C"),
             # ("Humidity SP", "hum_sp", "%"),
-            ("Light SP", "light_sp", "Lux"),
+            ("Light SP", "light_sp", "Lux"), 
             # ("Soil pH SP", "soil_ph_sp", "pH"),
-            # ("Soil EC SP", "soil_ec_sp", "uS/cm"),
+            # ("Soil EC SP", "soil_ec_sp", "uS/cm"), 
             # ("Soil Temp SP", "soil_temp_sp", "C"),
-            ("Soil Humidity SP", "soil_hum_sp", "%"),
-            ("Water Flow SP", "flow_sp", "L/h") # Use L/h as per class
+            ("Soil Humidity SP", "soil_hum_sp", "%"), 
+            # ("Water Flow SP", "flow_sp", "L/h")
         ]
         for name, key, unit in setpoints_to_print:
             val_str = format_value(current_state.get(key, "N/A"), unit)
-            right_lines.append('|' + f" {name}".ljust(right_col1_width) + '|' + f" {val_str}".ljust(right_col2_width) + '|')
-        right_lines.append(right_sep)
+            right_top_lines.append('|' + f" {name}".ljust(right_col1_width) + '|' + f" {val_str}".ljust(right_col2_width) + '|')
+        right_top_lines.append(right_sep)
 
-        # Combine Tables Side-by-Side
+        # Build Right Bottom Table (Resources)
+        right_bottom_lines = []
+        res_header = '|' + " Resource".ljust(right_col1_width) + '|' + " Consumption".ljust(right_col2_width) + '|'
+        # No top title for this one, just append to the right column
+        right_bottom_lines.append(res_header)
+        right_bottom_lines.append(right_sep)
+        resources_to_print = [
+            ("Water Consumed", "water_consumed", "L"),
+            ("Energy Consumed", "electricity_energy", "Wh") # Get latest cumulative energy reading
+        ]
+        for name, key, unit in resources_to_print:
+            val_str = format_value(current_state.get(key, "N/A"), unit)
+            right_bottom_lines.append('|' + f" {name}".ljust(right_col1_width) + '|' + f" {val_str}".ljust(right_col2_width) + '|')
+        right_bottom_lines.append(right_sep)
+
+        # Combine Right Tables Vertically
+        right_lines = right_top_lines + right_bottom_lines
+
+        # Combine Left and Right Tables Horizontally
         max_lines = max(len(left_lines), len(right_lines))
         combined_output = []
-        
-        # Create blank lines for padding
         left_blank = ' ' * left_total_width
         right_blank = ' ' * right_total_width
-
         for i in range(max_lines):
             left_line = left_lines[i] if i < len(left_lines) else left_blank
             right_line = right_lines[i] if i < len(right_lines) else right_blank
@@ -334,3 +333,8 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
 
         # Sleep
         time.sleep(1)
+
+# --- Placeholder for Integration --- 
+# (Integration example remains the same as previous version)
+
+

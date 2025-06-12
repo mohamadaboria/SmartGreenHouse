@@ -14,6 +14,18 @@ from serial_logger import serial_logger_task
 import threading
 import numpy as np
 from simple_pid import PID
+from flask import Flask, render_template, Response
+
+
+IMAGE_CAP_INTERVAL = 6  # hours interval to capture the image (every x hours)
+RESOURCES_CONSUMPTION_LOG_AND_RESET_INTERVAL = 1  # hours interval to log and reset the resources consumption
+
+# initialize the mqtt handler
+mqtt_handler = MqttHandler("33ea71e0e0034036b86bee133525b810.s1.eu.hivemq.cloud", 8883, "SmartGreenHouse", "SmartGreenHouse2025")
+
+# initialize the mongo db handler
+mongo_db_handler = MongoDBHandler(
+    "mongodb+srv://smartGh-00:Smartgreenhouse1@greenhouse.ibf6l7y.mongodb.net/?retryWrites=true&w=majority&appName=GreenHouse", "GreenHouse")
 
 # # dht22 setup
 dht22_pin = board.D26
@@ -39,6 +51,10 @@ env_sensors.set_water_flow_sensor_pin(water_flow_sensor_pin)
 
 # initialize the application actuators
 env_actuators = GH_Actuators(0x30, i2c, 'big')
+
+# initialize the setpoints
+setpoints = GH_Setpoints(mqtt_handler, mongo_db_handler, env_actuators)
+
 # reset the esp
 while not env_actuators.restart_esp32():
     print("Restarting ESP32...")
@@ -89,16 +105,6 @@ while not env_actuators.setup_water_pump_esp32(pin=33, channel=4, timer_src=2, f
 
 time.sleep(1)
 
-# initialize the mqtt handler
-mqtt_handler = MqttHandler("33ea71e0e0034036b86bee133525b810.s1.eu.hivemq.cloud", 8883, "SmartGreenHouse", "SmartGreenHouse2025")
-
-# initialize the mongo db handler
-mongo_db_handler = MongoDBHandler(
-    "mongodb+srv://smartGh-00:Smartgreenhouse1@greenhouse.ibf6l7y.mongodb.net/?retryWrites=true&w=majority&appName=GreenHouse", "GreenHouse")
-
-# initialize the setpoints
-setpoints = GH_Setpoints(mqtt_handler, mongo_db_handler)
-
 def set_all_light_strip_dc(duty_cycle = 0):
     """Set the duty cycle for both light strips"""
     while not env_actuators.set_light_strip_1_duty_cycle(duty_cycle):
@@ -109,9 +115,18 @@ def set_all_light_strip_dc(duty_cycle = 0):
         print("Setting light strip 2 duty cycle again...")
         time.sleep(0.1)
 
+def set_all_heater_dc(duty_cycle = 0):
+    """Set the duty cycle for both heater and heater fan"""
+    while not env_actuators.set_heater_duty_cycle(duty_cycle):
+        print("Setting heater duty cycle again...")
+        time.sleep(0.1)
+
+    while not env_actuators.set_heater_fan_duty_cycle(duty_cycle):
+        print("Setting heater fan duty cycle again...")
+        time.sleep(0.1)
+
 # set the subscriptions and publications
-mqtt_handler.set_subscription("env_monitoring_system/actuators/heater_fan/dc", env_actuators.set_heater_fan_duty_cycle)
-mqtt_handler.set_subscription("env_monitoring_system/actuators/heater/dc", env_actuators.set_heater_duty_cycle)
+mqtt_handler.set_subscription("env_monitoring_system/actuators/heater/dc", set_all_heater_dc)
 mqtt_handler.set_subscription("env_monitoring_system/actuators/light/dc", set_all_light_strip_dc)
 mqtt_handler.set_subscription("env_monitoring_system/actuators/water_pump/dc", env_actuators.set_water_pump_duty_cycle)
 mqtt_handler.set_subscription("env_monitoring_system/actuators/fan/dc", env_actuators.set_fan_duty_cycle)
@@ -130,46 +145,40 @@ mqtt_handler.set_publish("env_monitoring_system/sensors/soil_ec", 0, True)
 mqtt_handler.set_publish("env_monitoring_system/sensors/soil_temp", 0, True)
 mqtt_handler.set_publish("env_monitoring_system/sensors/soil_humidity", 0, True)
 mqtt_handler.set_publish("env_monitoring_system/sensors/water_flow", 0, True)
-mqtt_handler.set_publish("env_monitoring_system/actuators/heater_fan/state", 0, True)
+mqtt_handler.set_publish("env_monitoring_system/sensors/voltage", 0, True)
+mqtt_handler.set_publish("env_monitoring_system/sensors/current", 0, True)
+mqtt_handler.set_publish("env_monitoring_system/resources/energy", 0, True)
+mqtt_handler.set_publish("env_monitoring_system/resources/water_amount", 0, True)
 mqtt_handler.set_publish("env_monitoring_system/actuators/heater/state", 0, True)
 mqtt_handler.set_publish("env_monitoring_system/actuators/light/state", 0, True)
 mqtt_handler.set_publish("env_monitoring_system/actuators/water_pump/state", 0, True)
 mqtt_handler.set_publish("env_monitoring_system/actuators/fan/state", 0, True)
 
 # create the collections in the database
-mongo_db_handler.create_collection("sensors_data", "air temp", mongo_db_handler.sensor_field_doc_temp(
-    "dht22.temperature", "temperature", 0.0, "C"))
-mongo_db_handler.create_collection("sensors_data", "air humidity", mongo_db_handler.sensor_field_doc_temp(
-    "dht22.humidity", "humidity", 0.0, "%"))
-mongo_db_handler.create_collection("sensors_data", "light intensity", mongo_db_handler.sensor_field_doc_temp(
-    "ads1115.light_intensity", "intensity", 0.0, "Lux"))
-mongo_db_handler.create_collection(
-    "sensors_data", "soil ph", mongo_db_handler.sensor_field_doc_temp("soil_ph", "ph", 0.0, "pH"))
-mongo_db_handler.create_collection(
-    "sensors_data", "soil ec", mongo_db_handler.sensor_field_doc_temp("soil_ec", "ec", 0.0, "uS/cm"))
-mongo_db_handler.create_collection("sensors_data", "soil temp", mongo_db_handler.sensor_field_doc_temp(
-    "soil_temp", "temperature", 0.0, "C"))
-mongo_db_handler.create_collection("sensors_data", "soil humidity", mongo_db_handler.sensor_field_doc_temp(
-    "soil_humidity", "humidity", 0.0, "%"))
-mongo_db_handler.create_collection("sensors_data", "water flow", mongo_db_handler.sensor_field_doc_temp(
-    "water_flow", "flow", 0.0, "L/min"))
+mongo_db_handler.create_collection("sensors_data", "air temp", mongo_db_handler.sensor_field_doc_temp("dht22.temperature", "temperature", 0.0, "C"))
+mongo_db_handler.create_collection("sensors_data", "air humidity", mongo_db_handler.sensor_field_doc_temp("dht22.humidity", "humidity", 0.0, "%"))
+mongo_db_handler.create_collection("sensors_data", "light intensity", mongo_db_handler.sensor_field_doc_temp("ads1115.light_intensity", "intensity", 0.0, "Lux"))
+mongo_db_handler.create_collection("sensors_data", "soil ph", mongo_db_handler.sensor_field_doc_temp("soil_ph", "ph", 0.0, "pH"))
+mongo_db_handler.create_collection("sensors_data", "soil ec", mongo_db_handler.sensor_field_doc_temp("soil_ec", "ec", 0.0, "uS/cm"))
+mongo_db_handler.create_collection("sensors_data", "soil temp", mongo_db_handler.sensor_field_doc_temp("soil_temp", "temperature", 0.0, "C"))
+mongo_db_handler.create_collection("sensors_data", "soil humidity", mongo_db_handler.sensor_field_doc_temp("soil_humidity", "humidity", 0.0, "%"))
+mongo_db_handler.create_collection("sensors_data", "water flow", mongo_db_handler.sensor_field_doc_temp("water_flow", "flow", 0.0, "L/min"))
+mongo_db_handler.create_collection("sensors_data", "voltage", mongo_db_handler.sensor_field_doc_temp("pzem-004t.voltage", "voltage", 0.0, "V"))
+mongo_db_handler.create_collection("sensors_data", "current", mongo_db_handler.sensor_field_doc_temp("pzem-004t.current", "current", 0.0, "A"))
+mongo_db_handler.create_collection("resources", "energy consumption", mongo_db_handler.resource_field_doc_temp("pzem-004t.energy", "energy_consumption", 0.0, "Wh"))
+mongo_db_handler.create_collection("resources", "water consumption", mongo_db_handler.resource_field_doc_temp( "water_flow.total_amount", "water_amount", 0.0, "L"))
+
 
 # create the actuators collections in the database
-mongo_db_handler.create_collection(
-    "actuators_data", "heater", mongo_db_handler.actuator_field_doc_temp("heater", "heater", 0))
-mongo_db_handler.create_collection(
-    "actuators_data", "light", mongo_db_handler.actuator_field_doc_temp("light", "light", 0))
-mongo_db_handler.create_collection(
-    "actuators_data", "water pump", mongo_db_handler.actuator_field_doc_temp("water_pump", "water pump", 0))
-mongo_db_handler.create_collection(
-    "actuators_data", "fan", mongo_db_handler.actuator_field_doc_temp("fan", "fan", 0))
+mongo_db_handler.create_collection("actuators_data", "heater", mongo_db_handler.actuator_field_doc_temp("heater", "heater", 0))
+mongo_db_handler.create_collection("actuators_data", "light", mongo_db_handler.actuator_field_doc_temp("light", "light", 0))
+mongo_db_handler.create_collection("actuators_data", "water pump", mongo_db_handler.actuator_field_doc_temp("water_pump", "water pump", 0))
+mongo_db_handler.create_collection("actuators_data", "fan", mongo_db_handler.actuator_field_doc_temp("fan", "fan", 0))
 
 # create the setpoints collections in the database
-mongo_db_handler.create_collection("plant_images", "plant image", {
-                                   "_id": "", "image": "", "timestamp": 0})
+mongo_db_handler.create_collection("plant_images", "plant image", {"_id": "", "image": "", "timestamp": 0})
 
 s3_handler = S3Handler("smartgreenhouse-2025", "eu-north-1")
-IMAGE_CAP_INTERVAL = 6  # hours interval to capture the image (every x hours)
 
 # init the camera
 camera = GH_Camera()
@@ -248,7 +257,7 @@ def temperature_sp_adjustment_task():
         # Output near zero = within deadband
         raw_output = temperature_pid(current_temp)
         
-                # Anti-windup logic: If output is saturated, prevent integral accumulation
+        # Anti-windup logic: If output is saturated, prevent integral accumulation
         if (raw_output >= OUTPUT_LIMITS[1] and (temperature_set_point - current_temp) > 0) or \
            (raw_output <= OUTPUT_LIMITS[0] and (temperature_set_point - current_temp) < 0):
             # Skip integral accumulation when output is clamped
@@ -269,9 +278,14 @@ def temperature_sp_adjustment_task():
             heater_duty_cycle = max(MIN_POWER, min(MAX_POWER, heater_duty_cycle)) # Clamp to be safe
             
             # Apply heating
-            env_actuators.set_heater_duty_cycle(heater_duty_cycle)
-            env_actuators.set_heater_fan_duty_cycle(heater_duty_cycle)  # Heater fan matches heater
-            env_actuators.set_fan_duty_cycle(0)  # Cooling fan off
+            while not env_actuators.set_heater_duty_cycle(heater_duty_cycle):
+                time.sleep(0.1)
+
+            while not env_actuators.set_heater_fan_duty_cycle(heater_duty_cycle):  # Heater fan matches heater
+                time.sleep(0.1)
+
+            while not env_actuators.set_fan_duty_cycle(0): # Cooling fan off
+                time.sleep(0.1)
             
         elif control_output < 0:  # Negative output = cooling
             # Scale cooling power from 0-1 range (abs value) to MIN_POWER-MAX_POWER range
@@ -293,8 +307,10 @@ def temperature_sp_adjustment_task():
             # Turn everything off
             while not env_actuators.set_heater_duty_cycle(0):
                 time.sleep(0.1)
+
             while not env_actuators.set_heater_fan_duty_cycle(0):
                 time.sleep(0.1)
+
             while not env_actuators.set_fan_duty_cycle(0):
                 time.sleep(0.1)
         
@@ -371,65 +387,96 @@ def light_sp_adjustment_task():
 
 def set_soil_moisture_setpoint_task():
     PUMP_DUTY_CYCLE = 2047  # Full power for the pump
-    WATER_Q = 500  # milliliters
-    SLEEP_INTERVAL = 5 * 60  # seconds (5 minutes)
+    WATER_Q = 500  # milliliters per cycle
+    SLEEP_INTERVAL = 0.5 * 60  # seconds (5 minutes)
+
+    irrigating = False  # Tracks irrigation state
+
     while True:
         soil_pause_event.wait()  # Wait until the event is set
-        # read the soil moisture setpoint
-        mo_set_point = setpoints.get_soil_humidity_setpoint()
 
-        # read the soil moisture value
+        # Read the setpoint and hysteresis from user settings
+        mo_set_point = setpoints.get_soil_humidity_setpoint()
+        hysteresis = setpoints.get_soil_humidity_hysteresis()  # Assume you add this function
+
+        start_threshold = mo_set_point - hysteresis
+
+        # Read the soil moisture value
         soil_semaphore.acquire()
         try:
             _, _, soil_humidity, _ = env_sensors.get_soil_values()
         except Exception as e:
             print(f"Error reading soil moisture: {e}")
-            continue
         finally:
             soil_semaphore.release()
 
-        # check if the soil moisture is below the setpoint
-        if soil_humidity < mo_set_point:
-            # turn on the water pump
+        print(f"[Soil] Moisture: {soil_humidity:.2f}%, Setpoint: {mo_set_point:.2f}%, Threshold: {start_threshold:.2f}%")
+
+        # Hysteresis logic
+        if not irrigating and soil_humidity <= start_threshold:
+            irrigating = True
+            print("💧 Starting irrigation...")
+
+        elif irrigating and soil_humidity >= mo_set_point:
+            irrigating = False
+            print("✅ Stopping irrigation...")
+
+        if irrigating:
+            # Start pump
             while not env_actuators.set_water_pump_duty_cycle(PUMP_DUTY_CYCLE):
                 time.sleep(0.1)
             print("Water pump ON")
+            
             total_added = 0
             while total_added < WATER_Q:
-                # read the water flow rate
+                # Read water flow rate
                 water_flow_semaphore.acquire()
                 try:
                     water_flow = env_sensors.get_water_flow_rate()  # L/min
-                    water_flow_mil_sec = (water_flow * 1000) / 60  # L/s
+                    water_flow_mil_sec = (water_flow * 1000) / 60  # mL/s
                 except Exception as e:
                     print(f"Error reading water flow: {e}")
-                    continue
-                finally:
                     water_flow_semaphore.release()
+                    break
+                water_flow_semaphore.release()
 
-                # calculate the total added water
                 if water_flow_mil_sec > 0:
                     total_added += water_flow_mil_sec
+                    print(f"Added: {total_added:.2f} mL / {WATER_Q} mL")
                     time.sleep(1)  # wait for 1 second
                 else:
-                    print("Water flow is 0, pump isn't working")
+                    print("⚠️ Water flow is 0, pump isn't working properly.")
                     break
-            # time.sleep(2.25)  # wait for 10 seconds to let the pump run
-            # turn off the water pump
+
+                time.sleep(1)
+
+            # Stop pump after adding required water
             while not env_actuators.set_water_pump_duty_cycle(0):
                 time.sleep(0.1)
             print("Water pump OFF")
 
+        else:
+            print("No irrigation needed. System idle.")
+
         time.sleep(SLEEP_INTERVAL)
+
 
 serial_logger_thread = None
 
 def app_task():
     global serial_logger_thread
-
+    current_operation_mode = setpoints.get_operation_mode()
     last_time_captured = datetime.datetime.now() - datetime.timedelta(hours=IMAGE_CAP_INTERVAL)
     last_sensor_update = datetime.datetime.now() - datetime.timedelta(seconds=30)
     last_actuators_update = datetime.datetime.now() - datetime.timedelta(seconds=1)
+    
+    # retrieve last time energy was reset from local file
+    try:
+        with open('consumption/last_energy_reset.txt', 'r') as file:
+            last_resources_reset_and_log = datetime.datetime.strptime(file.read().strip(), '%Y-%m-%d %H:%M:%S')
+    except FileNotFoundError:
+        last_resources_reset_and_log = datetime.datetime.now() - datetime.timedelta(hours=RESOURCES_CONSUMPTION_LOG_AND_RESET_INTERVAL)
+
     prev_light_duty_cycle = 0.0
     prev_heater_duty_cycle = 0.0
     prev_heater_fan_duty_cycle = 0.0
@@ -441,7 +488,7 @@ def app_task():
     
     while True:
 
-        if (datetime.datetime.now() - last_sensor_update).total_seconds() > 30:
+        if (datetime.datetime.now() - last_sensor_update).total_seconds() > 10:
             temperature_semaphore.acquire()
             try:
                 air_temp_c = env_sensors.get_air_temperature_C()
@@ -462,45 +509,49 @@ def app_task():
             finally:
                 soil_semaphore.release()
 
-
             electricity_semaphore.acquire()
             try:
                 voltage, current, power, energy, frequency, power_factor, alarm = env_sensors.get_electricity_values()
+                # print(f"Voltage: {voltage:.2f} V")
+                # print(f"Current: {current:.2f} A")
+                # print(f"Power: {power:.2f} W")
+                # print(f"Energy: {energy:.2f} Wh")
+                # print(f"Frequency: {frequency:.2f} Hz")
+                # print(f"Power Factor: {power_factor:.2f}")
+                # print(f"Alarm: {alarm}")
+                # send the data to the mqtt broker
+                # mqtt_handler.publish("env_monitoring_system/sensors/power", power)
+                # mqtt_handler.publish("env_monitoring_system/sensors/energy", energy)
+                # mqtt_handler.publish("env_monitoring_system/sensors/frequency", frequency)
+                # mqtt_handler.publish("env_monitoring_system/sensors/power_factor", power_factor)
+                # mqtt_handler.publish("env_monitoring_system/sensors/alarm", alarm)
             except Exception as e:
                 print(f"Error reading electricity sensor: {e}")
             finally:
                 electricity_semaphore.release()
 
-
-            water_flow_semaphore.acquire()
-            try:
-                water_flow = env_sensors.get_water_flow_rate()
-            finally:
-                water_flow_semaphore.release()
-
-            print("**************************************************")
-            print(f'Air Temperature (C): {air_temp_c} C')
-            print(f'Air Temperature (F): {air_temp_f} F')
-            print(f'Air Humidity (%): {air_humidity} %')
-            print("**************************************************")
-            print(f'ADS1115 Light Intensity (Lux): {light_intensity} Lux | veml = {env_sensors.get_light_intensity_veml()} lux')
-            print("**************************************************")
-            print(f'Soil PH: {soil_ph}')
-            print(f'Soil EC (uS/cm): {soil_ec} uS/cm')
-            print(f'Soil Temperature (C): {soil_temp} C')
-            print(f'Soil Humidity (%): {soil_humidity} %')
-            print("**************************************************")
-            print(f'Water Flow: {water_flow} L/min')            
-            print("**************************************************")
-            print(f'Voltage: {voltage} V')
-            print(f'Current: {current} A')
-            print(f'Power: {power} W')
-            print(f'Energy: {energy} Wh')
-            print(f'Frequency: {frequency} Hz')
-            print(f'Power Factor: {power_factor}')
-            print(f'Alarm: {alarm}')
-            print("**************************************************")
-            last_sensor_update = datetime.datetime.now()
+            # print("**************************************************")
+            # print(f'Air Temperature (C): {air_temp_c} C')
+            # print(f'Air Temperature (F): {air_temp_f} F')
+            # print(f'Air Humidity (%): {air_humidity} %')
+            # print("**************************************************")
+            # print(f'ADS1115 Light Intensity (Lux): {light_intensity} Lux | veml = {env_sensors.get_light_intensity_veml()} lux')
+            # print("**************************************************")
+            # print(f'Soil PH: {soil_ph}')
+            # print(f'Soil EC (uS/cm): {soil_ec} uS/cm')
+            # print(f'Soil Temperature (C): {soil_temp} C')
+            # print(f'Soil Humidity (%): {soil_humidity} %')
+            # print("**************************************************")
+            # print(f'Water Flow: {water_flow} L/min')            
+            # print("**************************************************")
+            # print(f'Voltage: {voltage} V')
+            # print(f'Current: {current} A')
+            # print(f'Power: {power} W')
+            # print(f'Energy: {energy} Wh')
+            # print(f'Frequency: {frequency} Hz')
+            # print(f'Power Factor: {power_factor}')
+            # print(f'Alarm: {alarm}')
+            # print("**************************************************")
                 
             # send the data to the mqtt broker
             mqtt_handler.publish("env_monitoring_system/sensors/air_temperature_C", air_temp_c)
@@ -509,8 +560,10 @@ def app_task():
             mqtt_handler.publish("env_monitoring_system/sensors/soil_ph", soil_ph)
             mqtt_handler.publish("env_monitoring_system/sensors/soil_ec", soil_ec)
             mqtt_handler.publish("env_monitoring_system/sensors/soil_temp", soil_temp)
-            mqtt_handler.publish("env_monitoring_system/sensors/soil_humidity", soil_humidity)
-            mqtt_handler.publish("env_monitoring_system/sensors/water_flow", water_flow)
+            mqtt_handler.publish("env_monitoring_system/sensors/soil_humidity", soil_humidity)                        
+            mqtt_handler.publish("env_monitoring_system/sensors/voltage", voltage)
+            mqtt_handler.publish("env_monitoring_system/sensors/current", current)
+            
 
             # send to database
             mongo_db_handler.insert_sensor_data("air temp", air_temp_c)
@@ -520,11 +573,61 @@ def app_task():
             mongo_db_handler.insert_sensor_data("soil ec", soil_ec)
             mongo_db_handler.insert_sensor_data("soil temp", soil_temp)
             mongo_db_handler.insert_sensor_data("soil humidity", soil_humidity)
-            mongo_db_handler.insert_sensor_data("water flow", water_flow)
+
+            last_sensor_update = datetime.datetime.now()
+
+        # update energy & water amount in database every 1 hour
+        if (datetime.datetime.now() - last_resources_reset_and_log).total_seconds() > RESOURCES_CONSUMPTION_LOG_AND_RESET_INTERVAL * 3600:
+            electricity_semaphore.acquire()
+            try:
+                _, _, _, energy_cons, _, _, _ = env_sensors.get_electricity_values()
+                mqtt_handler.publish("env_monitoring_system/resources/energy", energy_cons)
+                # send to database
+                mongo_db_handler.resource_field_doc_temp("pzem-004t.energy", "energy consumption", energy_cons)
+                # reset the energy consumption for the electricity sensor
+                env_sensors.reset_energy()
+
+            except Exception as e:
+                print(f"Error reading electricity sensor: {e}")
+            finally:
+                electricity_semaphore.release()
+
+            # water amount
+            water_flow_semaphore.acquire()
+            try:
+                water_amount = env_sensors.get_total_water_amount()
+                # print(f"Total Water Amount: {water_flow:.2f} L")
+                # send the data to the mqtt broker
+                mqtt_handler.publish("env_monitoring_system/resources/water_amount", water_amount)
+                # send to database
+                mongo_db_handler.resource_field_doc_temp("water_flow.total_amount", "water consumption", water_amount)         
+                
+                env_sensors.reset_water_amount()
+            except Exception as e:
+                print(f"Error reading water flow sensor: {e}")
+            finally:
+                water_flow_semaphore.release()
+
+            last_resources_reset_and_log = datetime.datetime.now()
+
+            # reset the energy and water amount in local files
+            with open('consumption/last_resources_reset.txt', 'w') as file:
+                file.write(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         
         # update the actuators data
         if (datetime.datetime.now() - last_actuators_update).total_seconds() > 1:
             last_actuators_update = datetime.datetime.now()
+            
+            # read the water flow rate safely
+            water_flow_semaphore.acquire()
+            try:
+                water_flow = env_sensors.get_water_flow_rate()
+                # print(f"Flow Rate: {water_flow:.2f} L/min")
+                mongo_db_handler.insert_sensor_data("water flow", water_flow)                
+                mqtt_handler.publish("env_monitoring_system/sensors/water_flow", water_flow)
+            finally:
+                water_flow_semaphore.release()
+
             # read the actuators data
             heater_fan_duty_cycle = env_actuators.get_heater_fan_duty_cycle()
             heater_duty_cycle = env_actuators.get_heater_duty_cycle()
@@ -631,16 +734,67 @@ def app_task():
                     time.sleep(1)
                 else:
                     print("Error capturing image")
+
+        if current_operation_mode != setpoints.get_operation_mode():
+            current_operation_mode = setpoints.get_operation_mode()
+            print(f"Operation mode changed to: {current_operation_mode}")
+            env_actuators.stop_all_actuators()  # Stop all actuators when mode changes
+
+
         
+
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/video_c1')
+def video_c1():
+    return Response(camera.generate_video_stream_camera_1(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/video_c2')
+def video_c2():
+    return Response(camera.generate_video_stream_camera_2(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/start_stream_c1')
+def start_stream_c1():
+    return Response(camera.generate_video_stream_camera_1(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+    
+@app.route('/start_stream_c2')
+def start_stream_c2():
+    return Response(camera.generate_video_stream_camera_2(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/stop_stream_c1')
+def stop_stream_c1():
+    camera.stop_camera_1()
+    return "Camera stopped."
+
+@app.route('/stop_stream_c2')
+def stop_stream_c2():
+    camera.stop_camera_2()
+    return "Camera stopped."
+
+# Function to run Flask server in a thread
+def run_flask():
+    app.run(host='0.0.0.0', port=5000, threaded=True, debug=False)
 
 
 if __name__ == "__main__":
-    
-
 
     setpoints.set_control_thread_event("temperature", temperature_pause_event)
     setpoints.set_control_thread_event("light", light_pause_event)
     setpoints.set_control_thread_event("moisture", soil_pause_event)
+    setpoints.set_soil_humidity_hysteresis(20.0)  # Set default hysteresis value
+
+    # Start Flask in a separate thread
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
 
     # create the threads
     app_thread = threading.Thread(target=app_task)
@@ -651,6 +805,7 @@ if __name__ == "__main__":
 
     # start the threads
     app_thread.start()
+    time.sleep(2)
     serial_logger_thread.start()
     temperature_thread.start()
     light_thread.start()

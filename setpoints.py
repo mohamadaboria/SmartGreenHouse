@@ -2,7 +2,7 @@ import numpy as np
 import threading
 
 class GH_Setpoints:
-    def __init__(self, mqtt_handler, mongo_db_handler):        
+    def __init__(self, mqtt_handler, mongo_db_handler, actuator_handler=None):        
         self.__temperature_setpoint = 25.0
         self.__humidity_setpoint = 60.0
         self.__light_setpoint = 10.0 # 0 - 18 lux
@@ -18,16 +18,11 @@ class GH_Setpoints:
             "moisture": threading.Event() 
         }        
 
-        self.__light_kp = 0.1  # Default Kp value for light control PID
-        self.__light_ki = 0.01
-        self.__light_kd = 0.01
-
-        self.__temperature_kp = 0.1  # Default Kp value for temperature control PID
-        self.__temperature_ki = 0.01
-        self.__temperature_kd = 0.01
-
         self.__mqtt_handler = mqtt_handler
         self.__mongo_db_handler = mongo_db_handler
+        self.__actuator_handler = actuator_handler
+
+        self.__soil_humidity_hysteresis = 20.0  # Default hysteresis value for soil humidity control
 
         temp = self.__mongo_db_handler.get_latest_doc_where("setpoints", {"type": "temperature"})
         if temp is not None:
@@ -77,6 +72,7 @@ class GH_Setpoints:
                 if control_thread_event is not None:
                     # pause the thread
                     control_thread_event.clear()
+            
         if mode == "autonomous":
             # Resume all control threads if they are paused
             for control_thread_event in self.__control_threads_events.values():
@@ -95,6 +91,15 @@ class GH_Setpoints:
     def set_temperature_setpoint(self, temperature_setpoint: float) -> None:
         print(f"Setting temperature setpoint to {temperature_setpoint} C")
         self.__temperature_setpoint = temperature_setpoint
+
+    def get_soil_humidity_hysteresis(self) -> float:
+        """Get the hysteresis value for soil humidity control."""
+        return  self.__soil_humidity_hysteresis
+    
+    def set_soil_humidity_hysteresis(self, hysteresis: float) -> None:
+        """Set the hysteresis value for soil humidity control."""
+        print(f"Setting soil humidity hysteresis to {hysteresis} %")
+        self.__soil_humidity_hysteresis = hysteresis
 
     def get_temperature_setpoint(self) -> float:
         return self.__temperature_setpoint
@@ -159,59 +164,8 @@ class GH_Setpoints:
             "soil_humidity_setpoint": self.__soil_humidity_setpoint,
             "water_flow_setpoint": self.__water_flow_setpoint,
         }
-    
-    def set_light_kp(self, kp: float) -> None:
-        """Set the light control PID Kp value"""
-        print(f"Setting light control PID Kp to {kp}")
-        self.__light_kp = kp
 
-    def get_light_kp(self) -> float:
-        """Get the light control PID Kp value"""
-        return self.__light_kp
     
-    def set_light_ki(self, ki: float) -> None:
-        """Set the light control PID Ki value"""
-        print(f"Setting light control PID Ki to {ki}")
-        self.__light_ki = ki
-
-    def get_light_ki(self) -> float:
-        """Get the light control PID Ki value"""
-        return self.__light_ki
-    
-    def set_light_kd(self, kd: float) -> None:
-        """Set the light control PID Kd value"""
-        print(f"Setting light control PID Kd to {kd}")
-        self.__light_kd = kd
-
-    def get_light_kd(self) -> float:
-        """Get the light control PID Kd value"""
-        return self.__light_kd
-    
-    def set_temperature_kp(self, kp: float) -> None:
-        """Set the temperature control PID Kp value"""
-        print(f"Setting temperature control PID Kp to {kp}")
-        self.__temperature_kp = kp
-
-    def get_temperature_kp(self) -> float:
-        """Get the temperature control PID Kp value"""
-        return self.__temperature_kp
-    
-    def set_temperature_ki(self, ki: float) -> None:
-        """Set the temperature control PID Ki value"""
-        print(f"Setting temperature control PID Ki to {ki}")
-        self.__temperature_ki = ki
-
-    def get_temperature_ki(self) -> float:
-        """Get the temperature control PID Ki value"""
-        return self.__temperature_ki
-    
-    def set_temperature_kd(self, kd: float) -> None:
-        """Set the temperature control PID Kd value"""
-        print(f"Setting temperature control PID Kd to {kd}")
-        self.__temperature_kd = kd
-    
-    def get_temperature_kd(self) -> float:
-        """Get the temperature control PID Kd value"""
-        return self.__temperature_kd
-    
-    
+    def get_operation_mode(self) -> str:
+        """Get the current operation mode."""
+        return self.operation_mode

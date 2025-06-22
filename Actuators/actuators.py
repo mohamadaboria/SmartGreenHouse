@@ -5,6 +5,9 @@ import board
 import busio
 import numpy as np
 import picamera2
+
+from utils.utils import _CUSTOM_PRINT_FUNC
+
 # Job IDs (Upper 3 bits of the first byte)
 JOB_INIT_PWM = 0b000  # Initialize PWM (8 bytes)
 JOB_SET_DUTY = 0b001  # Set PWM Duty Cycle (2 bytes)
@@ -32,7 +35,7 @@ class GH_Actuators:
             camera.start()
             # Capture an image and save it
             camera.capture_file('image.jpg')
-            print("Image captured and saved as 'image.jpg'.")
+            _CUSTOM_PRINT_FUNC("Image captured and saved as 'image.jpg'.")
             # Stop the camera preview
             camera.stop()
 
@@ -45,7 +48,7 @@ class GH_Actuators:
             # create the first byte to send to esp32
             first_byte = JOB_RESTART << 5 | len(frame) & 0x1F
             frame = first_byte.to_bytes(1, self.__frame_endianes) + frame + b'\x00' * (32 - len(frame) - 1)
-            # print(f"Frame to send: {frame.hex()}")
+            # _CUSTOM_PRINT_FUNC(f"Frame to send: {frame.hex()}")
             # send first byte
             self.__i2c_bus.writeto(self.__esp32_i2c_address, frame)
             # get the ready byte from esp32            
@@ -53,7 +56,7 @@ class GH_Actuators:
             self.__i2c_bus.unlock()
             return True            
         except Exception as e:
-            print(f"Error restarting ESP32: {e}")
+            _CUSTOM_PRINT_FUNC(f"Error restarting ESP32: {e}")
             self.__i2c_bus.unlock()
             return False        
     
@@ -66,14 +69,14 @@ class GH_Actuators:
             # create the first byte to send to esp32
             first_byte = JOB_LED_TOG << 5 | len(frame) & 0x1F
             frame = first_byte.to_bytes(1, self.__frame_endianes) + frame + b'\x00' * (32 - len(frame) - 1)
-            # print(f"Frame to send: {frame.hex()}")
+            # _CUSTOM_PRINT_FUNC(f"Frame to send: {frame.hex()}")
             # send first byte
             self.__i2c_bus.writeto(self.__esp32_i2c_address, frame)
             time.sleep(0.1)
             self.__i2c_bus.unlock()
             return True    
         except Exception as e:
-            print(f"Error toggling ESP32 onboard LED: {e}")
+            _CUSTOM_PRINT_FUNC(f"Error toggling ESP32 onboard LED: {e}")
             self.__i2c_bus.unlock()
             return False
 
@@ -87,13 +90,13 @@ class GH_Actuators:
             first_byte = JOB_INIT_PWM << 5 | len(frame) & 0x1F
             # complete the 32 bytes
             frame = first_byte.to_bytes(1, self.__frame_endianes) + frame + b'\x00' * (32 - len(frame) - 1)
-            print(f"initializing {device_name} with frequency {frequency} and duty cycle {duty_cycle} at pin {pin} and channel {channel} for timer {timer_src}: {frame.hex()}")
+            _CUSTOM_PRINT_FUNC(f"initializing {device_name} with frequency {frequency} and duty cycle {duty_cycle} at pin {pin} and channel {channel} for timer {timer_src}: {frame.hex()}")
             self.__i2c_bus.writeto(self.__esp32_i2c_address, frame)
             time.sleep(0.5)
             self.__i2c_bus.unlock()
             return True
         except Exception as e:
-            print(f"Error sending init request: {e}")
+            _CUSTOM_PRINT_FUNC(f"Error sending init request: {e}")
             self.__i2c_bus.unlock()
             return False
 
@@ -102,7 +105,7 @@ class GH_Actuators:
             while not self.__i2c_bus.try_lock():
                 time.sleep(0.1)
             if duty_cycle < 0 or duty_cycle > 4096:
-                print("Duty cycle must be between 0 and 4096")
+                _CUSTOM_PRINT_FUNC("Duty cycle must be between 0 and 4096")
                 self.__i2c_bus.unlock()
                 return False
             # create the frame to send to esp32
@@ -111,14 +114,14 @@ class GH_Actuators:
             first_byte = JOB_SET_DUTY << 5 | len(frame) & 0x1F
             # complete the 32 bytes
             frame = first_byte.to_bytes(1, self.__frame_endianes) + frame + b'\x00' * (32 - len(frame) - 1)
-            # print(f"setting {device_name} to duty cycle {duty_cycle}: {frame.hex()}")
+            # _CUSTOM_PRINT_FUNC(f"setting {device_name} to duty cycle {duty_cycle}: {frame.hex()}")
             # get the ready byte from esp32
             self.__i2c_bus.writeto(self.__esp32_i2c_address, frame) 
             time.sleep(0.1)
             self.__i2c_bus.unlock()
             return True
         except Exception as e:
-            # print(f"Error sending duty cycle update request: {e}")
+            # _CUSTOM_PRINT_FUNC(f"Error sending duty cycle update request: {e}")
             self.__i2c_bus.unlock()
             return False          
         
@@ -131,7 +134,7 @@ class GH_Actuators:
         try:
             return self.__send_init_request(pin, channel, timer_src, frequency, duty_cycle, "heater")
         except Exception as e:
-            # print(f"Error setting up heater: {e}")
+            # _CUSTOM_PRINT_FUNC(f"Error setting up heater: {e}")
             return False
 
     def set_heater_duty_cycle(self, duty_cycle: int) -> bool:
@@ -139,7 +142,7 @@ class GH_Actuators:
             self.__heater_duty_cycle = duty_cycle
             return self.__send_duty_cycle_update_request(duty_cycle, self.__heater_pin, self.__heater_channel, "heater")        
         except Exception as e:
-            # print(f"Error setting heater duty cycle: {e}")
+            # _CUSTOM_PRINT_FUNC(f"Error setting heater duty cycle: {e}")
             return False           
     
     def setup_heater_fan_esp32(self, pin: int, channel: int, timer_src: int, frequency: int, duty_cycle: int) -> bool:
@@ -151,7 +154,7 @@ class GH_Actuators:
         try:
             return self.__send_init_request(pin, channel, timer_src, frequency, duty_cycle, "heater_fan")
         except Exception as e:
-            # print(f"Error setting up heater fan: {e}")
+            # _CUSTOM_PRINT_FUNC(f"Error setting up heater fan: {e}")
             return False
     
     def set_heater_fan_duty_cycle(self, duty_cycle: int) -> bool:
@@ -159,7 +162,7 @@ class GH_Actuators:
             self.__heater_fan_duty_cycle = duty_cycle
             return self.__send_duty_cycle_update_request(duty_cycle, self.__heater_fan_pin, self.__heater_fan_channel, "heater_fan")
         except Exception as e:
-            # print(f"Error setting heater fan duty cycle: {e}")
+            # _CUSTOM_PRINT_FUNC(f"Error setting heater fan duty cycle: {e}")
             return False
 
     def setup_fan_esp32(self, pin: int, channel: int, timer_src: int, frequency: int, duty_cycle: int) -> bool:
@@ -171,7 +174,7 @@ class GH_Actuators:
         try:
             return self.__send_init_request(pin, channel, timer_src, frequency, duty_cycle, "fan")
         except Exception as e:
-            # print(f"Error setting up fan: {e}")
+            # _CUSTOM_PRINT_FUNC(f"Error setting up fan: {e}")
             return False
     
     def set_fan_duty_cycle(self, duty_cycle: int) -> bool:
@@ -179,7 +182,7 @@ class GH_Actuators:
             self.__fan_duty_cycle = duty_cycle
             return self.__send_duty_cycle_update_request(duty_cycle, self.__fan_pin, self.__fan_channel, "fan")
         except Exception as e:
-            # print(f"Error setting fan duty cycle: {e}")
+            # _CUSTOM_PRINT_FUNC(f"Error setting fan duty cycle: {e}")
             return False
     
     def setup_light_strip_1_esp32(self, pin: int, channel: int, timer_src: int, frequency: int, duty_cycle: int) -> bool:
@@ -191,7 +194,7 @@ class GH_Actuators:
         try:
             return self.__send_init_request(pin, channel, timer_src, frequency, duty_cycle, "light_strip_1")
         except Exception as e:
-            # print(f"Error setting up light: {e}")
+            # _CUSTOM_PRINT_FUNC(f"Error setting up light: {e}")
             return False
     
     def set_light_strip_1_duty_cycle(self, duty_cycle: int) -> bool:
@@ -199,7 +202,7 @@ class GH_Actuators:
             self.__light_duty_cycle = duty_cycle
             return self.__send_duty_cycle_update_request(duty_cycle, self.__light_pin, self.__light_channel, "light_strip_1")
         except Exception as e:
-            # print(f"Error setting light duty cycle: {e}")
+            # _CUSTOM_PRINT_FUNC(f"Error setting light duty cycle: {e}")
             return False
     
     def setup_light_strip_2_esp32(self, pin: int, channel: int, timer_src: int, frequency: int, duty_cycle: int) -> bool:
@@ -211,7 +214,7 @@ class GH_Actuators:
         try:
             return self.__send_init_request(pin, channel, timer_src, frequency, duty_cycle, "light_strip_2")
         except Exception as e:
-            # print(f"Error setting up light strip 2: {e}")
+            # _CUSTOM_PRINT_FUNC(f"Error setting up light strip 2: {e}")
             return False
         
     def set_light_strip_2_duty_cycle(self, duty_cycle: int) -> bool:
@@ -219,7 +222,7 @@ class GH_Actuators:
             self.__light_strip_2_duty_cycle = duty_cycle
             return self.__send_duty_cycle_update_request(duty_cycle, self.__light_strip_2_pin, self.__light_strip_2_channel, "light_strip_2")
         except Exception as e:
-            # print(f"Error setting light strip 2 duty cycle: {e}")
+            # _CUSTOM_PRINT_FUNC(f"Error setting light strip 2 duty cycle: {e}")
             return False
 
     def setup_water_pump_esp32(self, pin: int, channel: int, timer_src: int, frequency: int, duty_cycle: int) -> bool:
@@ -231,7 +234,7 @@ class GH_Actuators:
         try:
             return self.__send_init_request(pin, channel, timer_src, frequency, duty_cycle, "water_pump")
         except Exception as e:
-            # print(f"Error setting up water pump: {e}")
+            # _CUSTOM_PRINT_FUNC(f"Error setting up water pump: {e}")
             return False
     
     def set_water_pump_duty_cycle(self, duty_cycle: int) -> bool:
@@ -239,7 +242,7 @@ class GH_Actuators:
             self.__water_pump_duty_cycle = duty_cycle
             return self.__send_duty_cycle_update_request(duty_cycle, self.__water_pump_pin, self.__water_pump_channel, "water_pump")
         except Exception as e:
-            # print(f"Error setting water pump duty cycle: {e}")
+            # _CUSTOM_PRINT_FUNC(f"Error setting water pump duty cycle: {e}")
             return False
 
     # get current actuator duty cycles
@@ -247,42 +250,42 @@ class GH_Actuators:
         try:
             return self.__water_pump_duty_cycle
         except AttributeError:
-            print("Water pump not initialized.")
+            _CUSTOM_PRINT_FUNC("Water pump not initialized.")
             return 0
     
     def get_heater_duty_cycle(self) -> int:
         try:
             return self.__heater_duty_cycle
         except AttributeError:
-            print("Heater not initialized.")
+            _CUSTOM_PRINT_FUNC("Heater not initialized.")
             return 0
     
     def get_heater_fan_duty_cycle(self) -> int:
         try:
             return self.__heater_fan_duty_cycle
         except AttributeError:
-            print("Heater fan not initialized.")
+            _CUSTOM_PRINT_FUNC("Heater fan not initialized.")
             return 0
     
     def get_fan_duty_cycle(self) -> int:
         try:
             return self.__fan_duty_cycle
         except AttributeError:
-            print("Fan not initialized.")
+            _CUSTOM_PRINT_FUNC("Fan not initialized.")
             return 0
         
     def get_light_strip_1_duty_cycle(self) -> int:
         try:
             return self.__light_duty_cycle
         except AttributeError:
-            print("Light not initialized.")
+            _CUSTOM_PRINT_FUNC("Light not initialized.")
             return 0
         
     def get_light_strip_2_duty_cycle(self) -> int:
         try:
             return self.__light_strip_2_duty_cycle
         except AttributeError:
-            print("Light strip 2 not initialized.")
+            _CUSTOM_PRINT_FUNC("Light strip 2 not initialized.")
             return 0
         
     def stop_all_actuators(self) -> bool:
@@ -306,8 +309,8 @@ class GH_Actuators:
             while not self.set_light_strip_2_duty_cycle(0):
                 time.sleep(0.1)
                 
-            print("All actuators stopped.")
+            _CUSTOM_PRINT_FUNC("All actuators stopped.")
             return True
         except Exception as e:
-            print(f"Error stopping all actuators: {e}")
+            _CUSTOM_PRINT_FUNC(f"Error stopping all actuators: {e}")
             return False

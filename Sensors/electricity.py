@@ -1,6 +1,8 @@
 import serial
 import struct
 import time
+import datetime
+from utils.utils import _CUSTOM_PRINT_FUNC
 
 class ElectricitySensor:
     """
@@ -8,6 +10,7 @@ class ElectricitySensor:
     - Voltage, current, power, energy, frequency, power factor, and alarm via UART
     """
     def __init__(self):
+        self.last_time_reset = None
         pass
         
     def set_electricity_sensor_pin(self):
@@ -26,24 +29,24 @@ class ElectricitySensor:
         # resp = self.__get_electricity_modbus_response(False)
 
         # if resp == None:
-        #     print("Electricity sensor not responding!")
+        #     _CUSTOM_PRINT_FUNC("Electricity sensor not responding!")
         #     return False
         # check the response 
         # Correct reply: slave address + 0x42 + CRC check high byte + CRC check low byte. 
 
         # if len(resp) != 4 or resp[0] != 0x01 or resp[1] != 0x42:
-        #     print("Invalid response for Electricity sensor request!")
+        #     _CUSTOM_PRINT_FUNC("Invalid response for Electricity sensor request!")
         #     if resp[1] == 0xC2:
-        #         print("Electricity sensor error code: %02x", resp[2])
+        #         _CUSTOM_PRINT_FUNC("Electricity sensor error code: %02x", resp[2])
         #     return False
             
         # rcvd_crc = struct.unpack("<H", resp[2:4])[0]
         # calc_crc = self.__electricity_modbus_crc16(resp[:-2])
         # if rcvd_crc != calc_crc:
-        #     print("CRC mismatch!")
+        #     _CUSTOM_PRINT_FUNC("CRC mismatch!")
         #     return False
 
-        print("Electricity sensor initialized successfully!")
+        _CUSTOM_PRINT_FUNC("Electricity sensor initialized successfully!")
         return True
 
     def __electricity_modbus_crc16(self, data):
@@ -65,7 +68,7 @@ class ElectricitySensor:
         crc = self.__electricity_modbus_crc16(modbus_req)
         modbus_req.append(crc & 0xFF)
         modbus_req.append((crc >> 8) & 0xFF)
-        # print(f"Electricity Modbus Request (hex): {''.join([f'{x:02x}' for x in modbus_req])}")
+        # _CUSTOM_PRINT_FUNC(f"Electricity Modbus Request (hex): {''.join([f'{x:02x}' for x in modbus_req])}")
         self.__elec_uart.write(modbus_req)
 
     def __get_electricity_modbus_response(self, check = True):
@@ -75,14 +78,14 @@ class ElectricitySensor:
 
         if check == True:
             if len(response) < 25 or response[0] != 0x01 or response[1] != 0x04 or response[2] != 0x14:
-                print("Invalid response for Electricity request!")
+                _CUSTOM_PRINT_FUNC("Invalid response for Electricity request!")
                 return None
             
             rcvd_crc = struct.unpack("<H", response[23:25])[0]
             calc_crc = self.__electricity_modbus_crc16(response[:-2])
-            # print(f"Electricity Modbus Response (hex): {''.join([f'{x:02x}' for x in response])}")
+            # _CUSTOM_PRINT_FUNC(f"Electricity Modbus Response (hex): {''.join([f'{x:02x}' for x in response])}")
             if rcvd_crc != calc_crc:
-                print("CRC mismatch!")
+                _CUSTOM_PRINT_FUNC("CRC mismatch!")
                 return None
             
             return response[3:23]
@@ -98,7 +101,7 @@ class ElectricitySensor:
         try:
             self.__send_electricity_modbus_request()
             resp = self.__get_electricity_modbus_response()
-            # print(f"Electricity Modbus Response (hex): {''.join([f'{x:02x}' for x in resp])}")
+            # _CUSTOM_PRINT_FUNC(f"Electricity Modbus Response (hex): {''.join([f'{x:02x}' for x in resp])}")
             if resp == None:
                 return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
@@ -118,7 +121,7 @@ class ElectricitySensor:
 
             return voltage, current, power, energy, frequency, power_factor, alarm
         except Exception as err:
-            print(f'Sensor Error: {err.args[0]}')
+            _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
             return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
 
@@ -135,17 +138,34 @@ class ElectricitySensor:
             resp = self.__get_electricity_modbus_response(False)
 
             if resp is None or len(resp) != 4 or resp[0] != 0x01 or resp[1] != 0x42:
-                print("Invalid response for Electricity reset request!")
+                _CUSTOM_PRINT_FUNC("Invalid response for Electricity reset request!")
                 return False
             
             rcvd_crc = struct.unpack("<H", resp[2:4])[0]
             calc_crc = self.__electricity_modbus_crc16(resp[:-2])
             if rcvd_crc != calc_crc:
-                print("CRC mismatch!")
+                _CUSTOM_PRINT_FUNC("CRC mismatch!")
                 return False
 
-            print("Energy reset successfully!")
+            _CUSTOM_PRINT_FUNC("Energy reset successfully!")
+            self.last_time_reset = datetime.datetime.now()
             return True
         except Exception as err:
-            print(f'Sensor Error: {err.args[0]}')
+            _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
             return False
+        
+    def get_last_reset_time(self):
+        """Get the last reset time of the energy value"""
+        if self.last_time_reset is None:
+            return "Never"
+        else:
+            return self.last_time_reset.strftime("%Y-%m-%d %H:%M:%S")       
+
+    def set_last_resource_reset_time(self, reset_time):
+        """Set the last reset time of the energy value"""
+        try:
+            self.last_time_reset = datetime.datetime.strptime(reset_time, "%Y-%m-%d %H:%M:%S")
+            return True
+        except ValueError as e:
+            _CUSTOM_PRINT_FUNC(f"Error setting last reset time: {e}")
+            return False 

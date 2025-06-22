@@ -1,4 +1,5 @@
 import adafruit_dht
+from utils.utils import _CUSTOM_PRINT_FUNC
 
 class AirSensor:
     """
@@ -27,7 +28,7 @@ class AirSensor:
             self.__prev_temp = tempC
             return tempC
         except RuntimeError as err:
-            print(f"Sensors: {err.args[0]}")
+            _CUSTOM_PRINT_FUNC(f"Sensors: {err.args[0]}")
             return self.__prev_temp
     
     def get_air_temperature_F(self):
@@ -40,7 +41,7 @@ class AirSensor:
             self.__prev_temp_F = tempC * (9.0/5.0) + 32.0
             return self.__prev_temp_F
         except RuntimeError as err:
-            print(f"Sensors: {err.args[0]}")
+            _CUSTOM_PRINT_FUNC(f"Sensors: {err.args[0]}")
             return self.__prev_temp_F
 
     def get_air_humidity(self):
@@ -53,5 +54,5 @@ class AirSensor:
             self.__prev_hum = hum
             return hum
         except RuntimeError as err:
-            print(f"Sensors: {err.args[0]}")
+            _CUSTOM_PRINT_FUNC(f"Sensors: {err.args[0]}")
             return self.__prev_hum

@@ -1,5 +1,6 @@
 from adafruit_ads1x15.analog_in import AnalogIn
 import adafruit_veml7700
+from utils.utils import _CUSTOM_PRINT_FUNC
 
 class LightSensor:
     """
@@ -20,18 +21,18 @@ class LightSensor:
         #     try:
         #         self.__veml_sensor = adafruit_veml7700.VEML7700(I2C)
         #     except ValueError as err:
-        #         print(f'Sensor Error: {err.args[0]}')
+        #         _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
         #         self.__veml_sensor = None
         #         self.__last_veml_lux = 0.0
         #     finally:
         #         I2C.unlock()
 
         # except IOError as err:
-        #     print(f'Sensor Error: {err.args[0]}')
+        #     _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
         #     self.__veml_sensor = None
         #     self.__last_veml_lux = 0.0          
         # except RuntimeError as err:
-        #     print(f'Sensor Error: {err.args[0]}')
+        #     _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
         #     self.__veml_sensor = None
         #     self.__last_veml_lux = 0.0
 
@@ -46,7 +47,7 @@ class LightSensor:
             # self.__ads_sensor.gain = ads.GAIN_ONE # 1x gain
             return True
         except RuntimeError as err:
-            print(f'Sensor Error: {err.args[0]}')
+            _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
             return False
 
     def __get_lux_raw(self):
@@ -55,7 +56,7 @@ class LightSensor:
             val = self.ads_light.value
             return val
         except RuntimeError as err:
-            print(f'Sensor Error: {err.args[0]}')
+            _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
             return 0.0
 
     def __get_lux_voltage(self, ads_reading = 0.0):
@@ -64,7 +65,7 @@ class LightSensor:
             self.__last_voltage = self.ads_light.voltage
             return self.__last_voltage
         except RuntimeError as err:
-            print(f'Sensor Error: {err.args[0]}')
+            _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
             return self.__last_voltage
 
     def __get_lux_current(self, voltage = 0.0):
@@ -73,7 +74,7 @@ class LightSensor:
             self.__last_current = voltage / self.__light_sensor_resistance     
             return self.__last_current
         except RuntimeError as err:
-            print(f'Sensor Error: {err.args[0]}')
+            _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
             return self.__last_current
     
     def get_light_intensity(self):
@@ -82,7 +83,7 @@ class LightSensor:
             self.__last_lux = self.__get_lux_current(self.__get_lux_voltage()) * 1000000.0 * 2.0
             return self.__last_lux
         except RuntimeError as err:
-            print(f'Sensor Error: {err.args[0]}')
+            _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
             return self.__last_lux
 
 
@@ -92,6 +93,6 @@ class LightSensor:
             self.__last_veml_lux = self.__veml_sensor.lux
             return self.__last_veml_lux
         except RuntimeError as err:
-            print(f'Sensor Error: {err.args[0]}')
+            _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
             return self.__last_veml_lux
                         

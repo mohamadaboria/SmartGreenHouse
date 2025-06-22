@@ -12,6 +12,7 @@ from .air import AirSensor
 from .electricity import ElectricitySensor
 from .light import LightSensor
 from .water import WaterFlowSensor
+from utils.utils import _CUSTOM_PRINT_FUNC
 
 class GH_Sensors:
     """
@@ -129,7 +130,7 @@ class GH_Sensors:
         # try:            
         #     return self.light_sensor.get_light_intensity_veml()
         # except RuntimeError as err:
-        #     print(f'Sensor Error: {err.args[0]}')            
+        #     _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')            
         #     return 0
         # finally:
         #     self.__general_i2c.unlock()
@@ -151,3 +152,11 @@ class GH_Sensors:
     def reset_energy(self):
         """Reset the energy value in the electricity sensor"""
         return self.electricity_sensor.reset_energy()
+    
+    def get_last_resource_reset_time(self):
+        """Get the last time the resource was reset"""
+        return self.electricity_sensor.get_last_reset_time()
+    
+    def set_last_resource_reset_time(self, reset_time):
+        """Set the last time the resource was reset"""
+        self.electricity_sensor.set_last_resource_reset_time(reset_time)

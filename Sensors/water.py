@@ -2,6 +2,7 @@ import time
 import threading
 import gpiod
 from datetime import timedelta
+from utils.utils import _CUSTOM_PRINT_FUNC
 
 class WaterFlowSensor:
     """
@@ -26,7 +27,7 @@ class WaterFlowSensor:
         except FileNotFoundError:
             self.__water_amount = 0.0
         except ValueError:
-            print("Error reading water amount from file. Initializing to 0.0.")
+            _CUSTOM_PRINT_FUNC("Error reading water amount from file. Initializing to 0.0.")
             self.__water_amount = 0.0
 
 
@@ -84,7 +85,7 @@ class WaterFlowSensor:
 
             return self.__flow_rate
         except RuntimeError as err:
-            print(f'Sensor Error: {err.args[0]}')
+            _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
             return 0    
         except KeyboardInterrupt:
             self.stop()
@@ -108,6 +109,6 @@ class WaterFlowSensor:
         self.__water_amount = 0.0
         with open('consumption/water_amount.txt', 'w') as file:
             file.write('0.00')
-        print("Water amount reset to 0.0 liters.")
+        _CUSTOM_PRINT_FUNC("Water amount reset to 0.0 liters.")
 
     

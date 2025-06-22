@@ -3,6 +3,9 @@ import struct
 import numpy as np
 from adafruit_ads1x15.analog_in import AnalogIn
 
+from utils.utils import _CUSTOM_PRINT_FUNC
+
+
 class SoilSensor:
     """
     Class for handling soil-related sensor functionality including:
@@ -32,7 +35,7 @@ class SoilSensor:
         # 01 e1 00 33 5b 05 01 03 08 03 87
         response = self.__moisture_uart.read(11) # expected 11 bytes to be received        
         self.__moisture_uart.reset_input_buffer()
-        # print(f'soil response: {response.hex()}')
+        # _CUSTOM_PRINT_FUNC(f'soil response: {response.hex()}')
         return response if len(response) >= 11 else None
 
     def get_ph(self):
@@ -45,14 +48,14 @@ class SoilSensor:
                 return 0.0
 
             if resp[1] != 0x03:
-                print("Invalid response for Soil PH request!")
+                _CUSTOM_PRINT_FUNC("Invalid response for Soil PH request!")
                 return 0.0
             
             ph_val = struct.unpack(">H", resp[9:11])[0] / 10.0
 
             return ph_val
         except RuntimeError as err:
-            print(f"Sensor Error: {err.args[0]}")
+            _CUSTOM_PRINT_FUNC(f"Sensor Error: {err.args[0]}")
             return 0.0
 
     def get_ec(self):
@@ -65,14 +68,14 @@ class SoilSensor:
                 return 0.0
 
             if resp[1] != 0x03:
-                print("Invalid response for Soil EC request!")
+                _CUSTOM_PRINT_FUNC("Invalid response for Soil EC request!")
                 return 0.0
             
             ec_val = struct.unpack(">H", resp[7:9])[0]
 
             return ec_val
         except RuntimeError as err:
-            print(f"Sensor Error: {err.args[0]}")
+            _CUSTOM_PRINT_FUNC(f"Sensor Error: {err.args[0]}")
             return 0.0
 
     def get_soil_humidity(self):
@@ -85,14 +88,14 @@ class SoilSensor:
                 return 0.0
 
             if resp[1] != 0x03:
-                print("Invalid response for Soil Humidity request!")
+                _CUSTOM_PRINT_FUNC("Invalid response for Soil Humidity request!")
                 return 0.0
             
             humi_val = struct.unpack(">H", resp[3:5])[0] / 10.0
 
             return humi_val
         except RuntimeError as err:
-            print(f'Sensor Error: {err.args[0]}')
+            _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
             return 0.0
     
     def get_soil_temperature(self):
@@ -105,14 +108,14 @@ class SoilSensor:
                 return 0.0
             
             if resp[1] != 0x03:
-                print("Invalid response for Soil Temperature request!")
+                _CUSTOM_PRINT_FUNC("Invalid response for Soil Temperature request!")
                 return 0.0
             
             temp_val = struct.unpack(">H", resp[5:7])[0] / 10.0
 
             return temp_val
         except RuntimeError as err:
-            print(f'Sensor Error: {err.args[0]}')
+            _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
             return 0.0
 
     def get_soil_values(self):
@@ -128,7 +131,7 @@ class SoilSensor:
                 return 0.0, 0.0, 0.0, 0.0
 
             if resp[1] != 0x03:
-                print("Invalid response for Soil Values request!")
+                _CUSTOM_PRINT_FUNC("Invalid response for Soil Values request!")
                 return 0.0, 0.0, 0.0, 0.0
             
             ph_val = struct.unpack(">H", resp[9:11])[0] / 10.0
@@ -138,7 +141,7 @@ class SoilSensor:
 
             return ph_val, ec_val, humi_val, temp_val
         except RuntimeError as err:
-            print(f'Sensor Error: {err.args[0]}')
+            _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
             return 0.0, 0.0, 0.0, 0.0
 
     # ADS1115 soil moisture functions
@@ -158,5 +161,5 @@ class SoilSensor:
             moisture_perc = np.interp(moisture_raw, [self.__MOISTURE_SENSOR_VERY_WET_VAL, self.__MOISTURE_SENSOR_VERY_DRY_VAL], [100, 0])
             return moisture_perc
         except RuntimeError as err:
-            print(f'Sensor Error: {err.args[0]}')
+            _CUSTOM_PRINT_FUNC(f'Sensor Error: {err.args[0]}')
             return 0.0

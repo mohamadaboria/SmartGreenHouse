@@ -1,0 +1,10 @@
+Flask
+flask-cors
+boto3
+python-dotenv
+paho-mqtt
+opencv-python
+numpy
+tensorflow
+tensorflow-datasets
+Pillow

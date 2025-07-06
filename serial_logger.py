@@ -21,13 +21,15 @@ latest_data = {
     "temp_sp": "N/A", "hum_sp": "N/A", "light_sp": "N/A",
     "soil_ph_sp": "N/A", "soil_ec_sp": "N/A", "soil_temp_sp": "N/A",
     "soil_hum_sp": "N/A", "flow_sp": "N/A",
-    "water_consumed": 0.0 # Initialize cumulative water
+    "water_consumed": 0.0, # Initialize cumulative water
+    "last_resource_reset": "Never", # Store last resource reset time
+    "last_update_readings": "Never" # Store last update time for readings
 }
 
 # Lock for safely updating/reading latest_data 
 data_lock = threading.Lock()
 
-def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_sem, flow_sem, electricity_sem):
+def serial_logger_task(sensors, get_last_sensor_update_fun, actuators, setpoints, temp_sem, light_sem, soil_sem, flow_sem, electricity_sem):
     """Reads data, mode, setpoints, resources; prints 3 tables."""
     global latest_data
     
@@ -127,6 +129,10 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
             with data_lock: current_state["water_flow"] = latest_data["water_flow"]
         # Store cumulative water in state for display
         current_state["water_consumed"] = cumulative_water_liters 
+        # Store last resource reset time
+        current_state["last_resource_reset"] = sensors.get_last_resource_reset_time()
+        # Store last update time for readings
+        current_state["last_update_readings"] = get_last_sensor_update_fun()
 
         # Electricity (10s)
         if now >= last_read_datetimes["electricity"] + intervals["electricity"]:
@@ -216,7 +222,7 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
 
         # --- Formatting --- 
         left_col1_width = 18; left_col2_width = 18
-        right_col1_width = 18; right_col2_width = 12
+        right_col1_width = 25; right_col2_width = 25
         separator = " | "
         left_total_width = left_col1_width + left_col2_width + 3
         right_total_width = right_col1_width + right_col2_width + 3
@@ -307,7 +313,9 @@ def serial_logger_task(sensors, actuators, setpoints, temp_sem, light_sem, soil_
         right_bottom_lines.append(right_sep)
         resources_to_print = [
             ("Water Consumed", "water_consumed", "L"),
-            ("Energy Consumed", "electricity_energy", "Wh") # Get latest cumulative energy reading
+            ("Energy Consumed", "electricity_energy", "Wh"), # Get latest cumulative energy reading
+            ("Last Resource Reset", "last_resource_reset", ""), # Not printing this as it is a datetime
+            ("Last Update Readings", "last_update_readings", "") # Not printing this as it is a datetime
         ]
         for name, key, unit in resources_to_print:
             val_str = format_value(current_state.get(key, "N/A"), unit)
